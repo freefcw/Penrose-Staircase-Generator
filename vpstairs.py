@@ -82,7 +82,7 @@ def CLOSEPOLY(color):
     PLIST.clear()
 
 def S(l,x,y,skip_record=False,draw_diag=False):
-    global STEP_COLORS, STEP_POSITIONS
+    global STEP_COLORS, STEP_POSITIONS, CURRENT_STEP_INDEX
     PLIST.clear()
     # 台阶四个角点
     p1 = (x, y)
@@ -94,33 +94,21 @@ def S(l,x,y,skip_record=False,draw_diag=False):
     LINETO(*p2)
     LINETO(*p3)
     LINETO(*p4)
-    # 随机选择灰色或红色
-    is_red = random.choice([0, 1])
-    step_color = color_red if is_red else color_gray
+    
+    # 使用预生成的颜色序列
+    if not skip_record and CURRENT_STEP_INDEX < len(STEP_COLORS):
+        is_red = STEP_COLORS[CURRENT_STEP_INDEX]
+        step_color = color_red if is_red else color_gray
+    else:
+        # 对于 skip_record 的台阶，随机选色
+        is_red = random.choice([0, 1])
+        step_color = color_red if is_red else color_gray
     CLOSEPOLY(step_color)
     
-    # 如果是起点台阶，立即绘制对角线
-    if draw_diag:
-        sp1 = getFinalPoint(p1[0], -p1[1])
-        sp2 = getFinalPoint(p2[0], -p2[1])
-        sp3 = getFinalPoint(p3[0], -p3[1])
-        sp4 = getFinalPoint(p4[0], -p4[1])
-        line_width = max(1, int(ZM / 8))
-        line1 = Line(sp1, sp3)
-        line1.setOutline("white")
-        line1.setWidth(line_width)
-        line1.draw(win)
-        line2 = Line(sp2, sp4)
-        line2.setOutline("white")
-        line2.setWidth(line_width)
-        line2.draw(win)
-    
-    # 记录颜色和四个角点位置（除非 skip_record）
+    # 记录位置并检查是否绘制对角线（除非 skip_record）
     if not skip_record:
-        global CURRENT_STEP_INDEX
         # 检查是否是起点台阶
-        should_draw_diag = (CURRENT_STEP_INDEX == START_STEP_INDEX)
-        if should_draw_diag:
+        if CURRENT_STEP_INDEX == START_STEP_INDEX:
             sp1 = getFinalPoint(p1[0], -p1[1])
             sp2 = getFinalPoint(p2[0], -p2[1])
             sp3 = getFinalPoint(p3[0], -p3[1])
@@ -135,7 +123,6 @@ def S(l,x,y,skip_record=False,draw_diag=False):
             line2.setWidth(line_width)
             line2.draw(win)
         
-        STEP_COLORS.append(is_red)
         STEP_POSITIONS.append((p1, p2, p3, p4))
         CURRENT_STEP_INDEX += 1
 
@@ -291,11 +278,51 @@ def draw_sequence(start_y, scale_factor=1):
     if total_steps == 0:
         return
     
-    # 从起点开始重排序列，完整循环一周
-    if START_STEP_INDEX >= 0 and START_STEP_INDEX < total_steps:
-        ordered = STEP_COLORS[START_STEP_INDEX:] + STEP_COLORS[:START_STEP_INDEX]
+    # 绘制顺序: A区(A-1个) → D区(D-1个) → B区(B-1个) → C区(C-1个)
+    # 行走顺序: D区 → C区 → B区 → A区
+    # 需要重新映射
+    a_count = A - 1  # 8
+    d_count = D - 1  # 8
+    b_count = B - 1  # 4
+    c_count = C - 1  # 4
+    
+    # 绘制顺序索引范围:
+    # A区: 0 ~ a_count-1 (0-7)
+    # D区: a_count ~ a_count+d_count-1 (8-15)
+    # B区: a_count+d_count ~ a_count+d_count+b_count-1 (16-19)
+    # C区: a_count+d_count+b_count ~ 末尾 (20-23)
+    
+    # 按行走顺序重排: D → C → B → A
+    walking_order = []
+    # D区 (绘制索引 a_count ~ a_count+d_count-1)
+    walking_order.extend(STEP_COLORS[a_count:a_count+d_count])
+    # C区 (绘制索引 a_count+d_count+b_count ~ 末尾) - 需要反转
+    walking_order.extend(list(reversed(STEP_COLORS[a_count+d_count+b_count:])))
+    # B区 (绘制索引 a_count+d_count ~ a_count+d_count+b_count-1) - 需要反转
+    walking_order.extend(list(reversed(STEP_COLORS[a_count+d_count:a_count+d_count+b_count])))
+    # A区 (绘制索引 0 ~ a_count-1)
+    walking_order.extend(STEP_COLORS[0:a_count])
+    
+    # 计算起点在行走顺序中的位置
+    # START_STEP_INDEX 是绘制顺序中的索引，需要转换
+    if START_STEP_INDEX < a_count:
+        # 在A区 → 行走顺序中A在最后
+        walking_start = d_count + c_count + b_count + START_STEP_INDEX
+    elif START_STEP_INDEX < a_count + d_count:
+        # 在D区 → 行走顺序中D在最前
+        walking_start = START_STEP_INDEX - a_count
+    elif START_STEP_INDEX < a_count + d_count + b_count:
+        # 在B区 → 行走顺序中B在C后面
+        walking_start = d_count + c_count + (START_STEP_INDEX - a_count - d_count)
     else:
-        ordered = STEP_COLORS[:]
+        # 在C区 → 行走顺序中C在D后面
+        walking_start = d_count + (START_STEP_INDEX - a_count - d_count - b_count)
+    
+    # 从起点开始重排序列，完整循环一周
+    if walking_start >= 0 and walking_start < total_steps:
+        ordered = walking_order[walking_start:] + walking_order[:walking_start]
+    else:
+        ordered = walking_order[:]
     
     box_size = 20 * scale_factor
     margin = 5 * scale_factor
@@ -331,15 +358,18 @@ def draw_sequence(start_y, scale_factor=1):
         text.draw(win)
 
 def drawStaircase(x,y,step_len):
-    """绘制楼梯，在绘制起点台阶时同步绘制对角线"""
+    """绘制楼梯，先生成完整颜色序列，再按序列绘制台阶"""
     global STEP_COLORS, STEP_POSITIONS, START_STEP_INDEX, CURRENT_STEP_INDEX
-    STEP_COLORS = []
     STEP_POSITIONS = []
     CURRENT_STEP_INDEX = 0
     
-    # 先计算总台阶数并预选起点
-    # 台阶数 = (A-1) + (B-1) + (C-1) + (D-1) = A+B+C+D-4
+    # 先计算总台阶数
     total_steps = A + B + C + D - 4
+    
+    # 生成完整的颜色序列
+    STEP_COLORS = [random.choice([0, 1]) for _ in range(total_steps)]
+    
+    # 随机选择起点
     START_STEP_INDEX = random.randint(0, total_steps - 1)
     
     drawStepsA(x,y,step_len)
@@ -354,7 +384,45 @@ def drawStaircase(x,y,step_len):
     front_wall(x,y)
     right_wall(x,y)
     
+    # 绘制 ABCD 区域标签
+    draw_zone_labels()
+    
     return START_STEP_INDEX
+
+def draw_zone_labels():
+    """在四个区域绘制 A、B、C、D 标签"""
+    global win, XH, YH, ZM
+    
+    font_size = max(16, int(ZM / 1.5))
+    
+    # 使用窗口相对位置，更简单可靠
+    # A区: 左上角
+    label_a = Text(Point(80, 40), "A")
+    label_a.setSize(font_size)
+    label_a.setTextColor("black")
+    label_a.setStyle("bold")
+    label_a.draw(win)
+    
+    # B区: 右上角
+    label_b = Text(Point(XH - 80, 80), "B")
+    label_b.setSize(font_size)
+    label_b.setTextColor("black")
+    label_b.setStyle("bold")
+    label_b.draw(win)
+    
+    # C区: 右下角
+    label_c = Text(Point(XH - 80, YH / 2), "C")
+    label_c.setSize(font_size)
+    label_c.setTextColor("black")
+    label_c.setStyle("bold")
+    label_c.draw(win)
+    
+    # D区: 左下角
+    label_d = Text(Point(100, YH / 2 - 50), "D")
+    label_d.setSize(font_size)
+    label_d.setTextColor("black")
+    label_d.setStyle("bold")
+    label_d.draw(win)
 
 color1=color_rgb(0,255,0)
 color2=color_rgb(0,0,255)
