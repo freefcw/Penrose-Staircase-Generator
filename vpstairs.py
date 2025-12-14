@@ -81,23 +81,63 @@ def CLOSEPOLY(color):
     p.draw(win)
     PLIST.clear()
 
-def S(l,x,y,skip_record=False):
+def S(l,x,y,skip_record=False,draw_diag=False):
     global STEP_COLORS, STEP_POSITIONS
     PLIST.clear()
-    MOVETO(x,y)
-    LINETO(x+U*0.5*l,y+(H*l))
-    LINETO(x+U*0.5*l+U*l,y+(H*l))
-    LINETO(x+U*l,y+0)
+    # 台阶四个角点
+    p1 = (x, y)
+    p2 = (x+U*0.5*l, y+(H*l))
+    p3 = (x+U*0.5*l+U*l, y+(H*l))
+    p4 = (x+U*l, y)
+    
+    MOVETO(*p1)
+    LINETO(*p2)
+    LINETO(*p3)
+    LINETO(*p4)
     # 随机选择灰色或红色
     is_red = random.choice([0, 1])
     step_color = color_red if is_red else color_gray
     CLOSEPOLY(step_color)
-    # 记录颜色和中心位置（除非 skip_record）
+    
+    # 如果是起点台阶，立即绘制对角线
+    if draw_diag:
+        sp1 = getFinalPoint(p1[0], -p1[1])
+        sp2 = getFinalPoint(p2[0], -p2[1])
+        sp3 = getFinalPoint(p3[0], -p3[1])
+        sp4 = getFinalPoint(p4[0], -p4[1])
+        line_width = max(1, int(ZM / 8))
+        line1 = Line(sp1, sp3)
+        line1.setOutline("white")
+        line1.setWidth(line_width)
+        line1.draw(win)
+        line2 = Line(sp2, sp4)
+        line2.setOutline("white")
+        line2.setWidth(line_width)
+        line2.draw(win)
+    
+    # 记录颜色和四个角点位置（除非 skip_record）
     if not skip_record:
+        global CURRENT_STEP_INDEX
+        # 检查是否是起点台阶
+        should_draw_diag = (CURRENT_STEP_INDEX == START_STEP_INDEX)
+        if should_draw_diag:
+            sp1 = getFinalPoint(p1[0], -p1[1])
+            sp2 = getFinalPoint(p2[0], -p2[1])
+            sp3 = getFinalPoint(p3[0], -p3[1])
+            sp4 = getFinalPoint(p4[0], -p4[1])
+            line_width = max(1, int(ZM / 8))
+            line1 = Line(sp1, sp3)
+            line1.setOutline("white")
+            line1.setWidth(line_width)
+            line1.draw(win)
+            line2 = Line(sp2, sp4)
+            line2.setOutline("white")
+            line2.setWidth(line_width)
+            line2.draw(win)
+        
         STEP_COLORS.append(is_red)
-        center_x = x + U*0.5*l + U*l*0.5
-        center_y = y + H*l*0.5
-        STEP_POSITIONS.append((center_x, center_y))
+        STEP_POSITIONS.append((p1, p2, p3, p4))
+        CURRENT_STEP_INDEX += 1
 
 def drawStepsA(x,y,len):
     # A 区绘制 A 个台阶，但只有 A-1 个是真正的台阶（第一个是共享的起始/结束台阶）
@@ -220,19 +260,28 @@ def drawStairRectsD(x,y):
         stair_rect_D(x+(px-L*U*0.5*o+(U/2)*o),y+(py-(L+1)*H*o))
     
 def draw_footprint(step_index):
-    """在指定台阶上绘制起点标记（红色圆圈）"""
+    """在指定台阶上绘制对角线标记"""
     global STEP_POSITIONS, START_STEP_INDEX
     START_STEP_INDEX = step_index
     if step_index < len(STEP_POSITIONS):
-        cx, cy = STEP_POSITIONS[step_index]
-        p = getFinalPoint(cx, -cy)
-        # 绘制白边红色圆圈作为起点标记
-        radius = max(6, ZM / 3)
-        circle = Circle(p, radius)
-        circle.setFill(color_rgb(255, 50, 50))
-        circle.setOutline("white")
-        circle.setWidth(max(2, int(ZM / 8)))
-        circle.draw(win)
+        p1, p2, p3, p4 = STEP_POSITIONS[step_index]
+        # 转换为屏幕坐标
+        sp1 = getFinalPoint(p1[0], -p1[1])
+        sp2 = getFinalPoint(p2[0], -p2[1])
+        sp3 = getFinalPoint(p3[0], -p3[1])
+        sp4 = getFinalPoint(p4[0], -p4[1])
+        
+        line_width = max(1, int(ZM / 8))
+        # 绘制对角线 1: p1 -> p3
+        line1 = Line(sp1, sp3)
+        line1.setOutline("white")
+        line1.setWidth(line_width)
+        line1.draw(win)
+        # 绘制对角线 2: p2 -> p4
+        line2 = Line(sp2, sp4)
+        line2.setOutline("white")
+        line2.setWidth(line_width)
+        line2.draw(win)
 
 def draw_sequence(start_y, scale_factor=1):
     """在图形下方绘制颜色序列，每行6个，带边框"""
@@ -282,9 +331,16 @@ def draw_sequence(start_y, scale_factor=1):
         text.draw(win)
 
 def drawStaircase(x,y,step_len):
-    global STEP_COLORS, STEP_POSITIONS
+    """绘制楼梯，在绘制起点台阶时同步绘制对角线"""
+    global STEP_COLORS, STEP_POSITIONS, START_STEP_INDEX, CURRENT_STEP_INDEX
     STEP_COLORS = []
     STEP_POSITIONS = []
+    CURRENT_STEP_INDEX = 0
+    
+    # 先计算总台阶数并预选起点
+    # 台阶数 = (A-1) + (B-1) + (C-1) + (D-1) = A+B+C+D-4
+    total_steps = A + B + C + D - 4
+    START_STEP_INDEX = random.randint(0, total_steps - 1)
     
     drawStepsA(x,y,step_len)
 
@@ -298,10 +354,7 @@ def drawStaircase(x,y,step_len):
     front_wall(x,y)
     right_wall(x,y)
     
-    # 随机选择起点并绘制👣
-    if len(STEP_POSITIONS) > 0:
-        start_idx = random.randint(0, len(STEP_POSITIONS) - 1)
-        draw_footprint(start_idx)
+    return START_STEP_INDEX
 
 color1=color_rgb(0,255,0)
 color2=color_rgb(0,0,255)
@@ -313,6 +366,7 @@ color_red=color_rgb(220,60,60)
 STEP_COLORS = []
 STEP_POSITIONS = []
 START_STEP_INDEX = -1
+CURRENT_STEP_INDEX = 0
 XC=0
 YC=0
 U = 1
