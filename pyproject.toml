@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-penrose-stair = "vpstairs:main"
+penrose-stair = "cli:main"
 
 [build-system]
 requires = ["hatchling"]
