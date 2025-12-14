@@ -81,19 +81,28 @@ def CLOSEPOLY(color):
     p.draw(win)
     PLIST.clear()
 
-def S(l,x,y):
+def S(l,x,y,skip_record=False):
+    global STEP_COLORS, STEP_POSITIONS
     PLIST.clear()
     MOVETO(x,y)
     LINETO(x+U*0.5*l,y+(H*l))
     LINETO(x+U*0.5*l+U*l,y+(H*l))
     LINETO(x+U*l,y+0)
     # 随机选择灰色或红色
-    step_color = random.choice([color_gray, color_red])
+    is_red = random.choice([0, 1])
+    step_color = color_red if is_red else color_gray
     CLOSEPOLY(step_color)
+    # 记录颜色和中心位置（除非 skip_record）
+    if not skip_record:
+        STEP_COLORS.append(is_red)
+        center_x = x + U*0.5*l + U*l*0.5
+        center_y = y + H*l*0.5
+        STEP_POSITIONS.append((center_x, center_y))
 
 def drawStepsA(x,y,len):
+    # A 区绘制 A 个台阶，但只有 A-1 个是真正的台阶（第一个是共享的起始/结束台阶）
     for i in range(A-1,-1,-1):
-        S(len,x+((U*0.5*L)*i+(U/2)*i),y+(((H*L)-H)*i))
+        S(len,x+((U*0.5*L)*i+(U/2)*i),y+(((H*L)-H)*i), skip_record=(i == 0))
 
 def drawStepsB(x,y,len):
     for j in range(1,B,1):
@@ -210,18 +219,89 @@ def drawStairRectsD(x,y):
         py = (((H*L)-H)*(A-1))-H*(B-1)
         stair_rect_D(x+(px-L*U*0.5*o+(U/2)*o),y+(py-(L+1)*H*o))
     
-def drawStaircase(x,y,len):
-    drawStepsA(x,y,len)
+def draw_footprint(step_index):
+    """在指定台阶上绘制起点标记（红色圆圈）"""
+    global STEP_POSITIONS, START_STEP_INDEX
+    START_STEP_INDEX = step_index
+    if step_index < len(STEP_POSITIONS):
+        cx, cy = STEP_POSITIONS[step_index]
+        p = getFinalPoint(cx, -cy)
+        # 绘制白边红色圆圈作为起点标记
+        radius = max(6, ZM / 3)
+        circle = Circle(p, radius)
+        circle.setFill(color_rgb(255, 50, 50))
+        circle.setOutline("white")
+        circle.setWidth(max(2, int(ZM / 8)))
+        circle.draw(win)
+
+def draw_sequence(start_y, scale_factor=1):
+    """在图形下方绘制颜色序列，每行6个，带边框"""
+    global STEP_COLORS, START_STEP_INDEX, XH
+    
+    total_steps = len(STEP_COLORS)
+    if total_steps == 0:
+        return
+    
+    # 从起点开始重排序列，完整循环一周
+    if START_STEP_INDEX >= 0 and START_STEP_INDEX < total_steps:
+        ordered = STEP_COLORS[START_STEP_INDEX:] + STEP_COLORS[:START_STEP_INDEX]
+    else:
+        ordered = STEP_COLORS[:]
+    
+    box_size = 20 * scale_factor
+    margin = 5 * scale_factor
+    cols = 6
+    start_x = (XH - (cols * (box_size + margin))) / 2
+    
+    # 显示台阶数量提示
+    hint = Text(Point(XH/2, start_y - 15 * scale_factor), f"台阶序列 (共{total_steps}级, 从★开始)")
+    hint.setSize(min(12 * scale_factor, 30))
+    hint.setTextColor("black")
+    hint.draw(win)
+    
+    for i, color_val in enumerate(ordered):
+        row = i // cols
+        col = i % cols
+        x = start_x + col * (box_size + margin)
+        y = start_y + row * (box_size + margin)
+        
+        # 绘制边框
+        rect = Rectangle(Point(x, y), Point(x + box_size, y + box_size))
+        rect.setOutline("black")
+        rect.setWidth(max(1, scale_factor))
+        if color_val == 1:
+            rect.setFill(color_rgb(220, 60, 60))  # 红色
+        else:
+            rect.setFill(color_rgb(128, 128, 128))  # 灰色
+        rect.draw(win)
+        
+        # 绘制数字
+        text = Text(Point(x + box_size/2, y + box_size/2), str(color_val))
+        text.setSize(min(int(12 * scale_factor), 36))
+        text.setTextColor("white")
+        text.draw(win)
+
+def drawStaircase(x,y,step_len):
+    global STEP_COLORS, STEP_POSITIONS
+    STEP_COLORS = []
+    STEP_POSITIONS = []
+    
+    drawStepsA(x,y,step_len)
 
     inner_wall2(x,y)
     mid_wall2(x,y)
-    drawStepsD(x,y,len)
-    drawStepsB(x,y,len)
-    drawStepsC(x,y,len)
+    drawStepsD(x,y,step_len)
+    drawStepsB(x,y,step_len)
+    drawStepsC(x,y,step_len)
     drawStairRectsD(x,y)
     drawStairRectsC(x,y)
     front_wall(x,y)
     right_wall(x,y)
+    
+    # 随机选择起点并绘制👣
+    if len(STEP_POSITIONS) > 0:
+        start_idx = random.randint(0, len(STEP_POSITIONS) - 1)
+        draw_footprint(start_idx)
 
 color1=color_rgb(0,255,0)
 color2=color_rgb(0,0,255)
@@ -229,6 +309,10 @@ color3=color_rgb(255,255,0)
 # 台阶随机颜色：灰色和红色
 color_gray=color_rgb(128,128,128)
 color_red=color_rgb(220,60,60)
+# 记录每个台阶的颜色序列 (0=灰色, 1=红色) 和位置
+STEP_COLORS = []
+STEP_POSITIONS = []
+START_STEP_INDEX = -1
 XC=0
 YC=0
 U = 1
@@ -286,7 +370,12 @@ def main():
     ZM = 11/((A+B+C+D+L-4)*0.1) * scale_factor  # 应用缩放因子
     PLIST=[]
     XH = (A*L+B*L)*ZM
-    YH = (A*H*L+B*H*L)*ZM
+    stair_height = (A*H*L+B*H*L)*ZM
+    # 计算数列需要的额外高度 (台阶数量 / 6 行 * 每行高度)
+    total_steps = A + B + C + D - 4  # 大约的台阶数
+    seq_rows = (total_steps // 6) + 1
+    seq_height = seq_rows * (25 * scale_factor) + 30 * scale_factor
+    YH = stair_height + seq_height
     XO = 10 * scale_factor  # 缩放偏移量
     YO = (A*L*H*0.5)*ZM  # final y-offset
     print("The Penrose-Staircase Nr.", int(sys.argv[1]), " is: ", A, B, C, D, "(", L, ")", f"缩放: {scale_factor}x")
@@ -297,6 +386,9 @@ def main():
     message.setFace("courier")
     message.setSize(min(10 * scale_factor, 36))  # 字体大小最大36
     message.draw(win)
+    
+    # 绘制颜色序列
+    draw_sequence(stair_height + 10 * scale_factor, scale_factor)
 
     # 检查是否有 -o 参数指定输出文件
     output_file = None
