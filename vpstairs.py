@@ -270,8 +270,14 @@ def draw_footprint(step_index):
         line2.setWidth(line_width)
         line2.draw(win)
 
-def draw_sequence(start_y, scale_factor=1):
-    """在图形下方绘制颜色序列，每行6个，带边框"""
+def draw_sequence(start_y, scale_factor=1, show_decimal=False):
+    """在图形下方绘制颜色序列，每行6个，带边框
+    
+    Args:
+        start_y: 起始Y坐标
+        scale_factor: 缩放因子
+        show_decimal: 是否在每行下方显示十进制转换值（前3位和后3位）
+    """
     global STEP_COLORS, START_STEP_INDEX, XH
     
     total_steps = len(STEP_COLORS)
@@ -305,6 +311,7 @@ def draw_sequence(start_y, scale_factor=1):
     
     # 计算起点在行走顺序中的位置
     # START_STEP_INDEX 是绘制顺序中的索引，需要转换
+    # 注意：B区和C区在构建walking_order时被反转了，所以索引也需要反转
     if START_STEP_INDEX < a_count:
         # 在A区 → 行走顺序中A在最后
         walking_start = d_count + c_count + b_count + START_STEP_INDEX
@@ -312,11 +319,13 @@ def draw_sequence(start_y, scale_factor=1):
         # 在D区 → 行走顺序中D在最前
         walking_start = START_STEP_INDEX - a_count
     elif START_STEP_INDEX < a_count + d_count + b_count:
-        # 在B区 → 行走顺序中B在C后面
-        walking_start = d_count + c_count + (START_STEP_INDEX - a_count - d_count)
+        # 在B区 → 行走顺序中B在C后面，且B区被反转
+        position_in_b = START_STEP_INDEX - a_count - d_count
+        walking_start = d_count + c_count + (b_count - 1 - position_in_b)
     else:
-        # 在C区 → 行走顺序中C在D后面
-        walking_start = d_count + (START_STEP_INDEX - a_count - d_count - b_count)
+        # 在C区 → 行走顺序中C在D后面，且C区被反转
+        position_in_c = START_STEP_INDEX - a_count - d_count - b_count
+        walking_start = d_count + (c_count - 1 - position_in_c)
     
     # 从起点开始重排序列，完整循环一周
     if walking_start >= 0 and walking_start < total_steps:
@@ -324,10 +333,20 @@ def draw_sequence(start_y, scale_factor=1):
     else:
         ordered = walking_order[:]
     
+    # 调试日志
+    print(f"[DEBUG] 行走顺序颜色: {walking_order}")
+    print(f"[DEBUG] 起点索引(行走顺序): {walking_start}")
+    print(f"[DEBUG] 从起点开始的序列: {ordered}")
+    
     box_size = 20 * scale_factor
     margin = 5 * scale_factor
     cols = 6
     start_x = (XH - (cols * (box_size + margin))) / 2
+    
+    # 计算行高：如果显示十进制，每行需要额外高度
+    row_height = box_size + margin
+    if show_decimal:
+        row_height = box_size + margin + 15 * scale_factor  # 额外空间给十进制数字
     
     # 显示台阶数量提示
     hint = Text(Point(XH/2, start_y - 15 * scale_factor), f"台阶序列 (共{total_steps}级, 从★开始)")
@@ -335,11 +354,13 @@ def draw_sequence(start_y, scale_factor=1):
     hint.setTextColor("black")
     hint.draw(win)
     
+    num_rows = (len(ordered) + cols - 1) // cols
+    
     for i, color_val in enumerate(ordered):
         row = i // cols
         col = i % cols
         x = start_x + col * (box_size + margin)
-        y = start_y + row * (box_size + margin)
+        y = start_y + row * row_height
         
         # 绘制边框
         rect = Rectangle(Point(x, y), Point(x + box_size, y + box_size))
@@ -356,6 +377,60 @@ def draw_sequence(start_y, scale_factor=1):
         text.setSize(min(int(12 * scale_factor), 36))
         text.setTextColor("white")
         text.draw(win)
+    
+    # 绘制十进制转换值
+    if show_decimal:
+        for row in range(num_rows):
+            row_start_idx = row * cols
+            row_end_idx = min(row_start_idx + cols, len(ordered))
+            row_data = ordered[row_start_idx:row_end_idx]
+            
+            if len(row_data) >= 6:
+                # 前3位转十进制
+                first_3 = row_data[0:3]
+                first_decimal = first_3[0] * 4 + first_3[1] * 2 + first_3[2] * 1
+                
+                # 后3位转十进制
+                last_3 = row_data[3:6]
+                last_decimal = last_3[0] * 4 + last_3[1] * 2 + last_3[2] * 1
+                
+                # 十进制数字的Y位置（在方块下方）
+                decimal_y = start_y + row * row_height + box_size + 2 * scale_factor
+                decimal_box_height = 12 * scale_factor
+                
+                # 前3个方块的边框（宽度覆盖3个方块）
+                first_box_x1 = start_x
+                first_box_x2 = start_x + 3 * (box_size + margin) - margin
+                first_center_x = (first_box_x1 + first_box_x2) / 2
+                
+                # 绘制前3位的边框
+                rect1 = Rectangle(Point(first_box_x1, decimal_y), Point(first_box_x2, decimal_y + decimal_box_height))
+                rect1.setOutline("black")
+                rect1.setFill("white")
+                rect1.draw(win)
+                
+                # 绘制前3位的数字
+                text1 = Text(Point(first_center_x, decimal_y + decimal_box_height/2), str(first_decimal))
+                text1.setSize(min(int(10 * scale_factor), 24))
+                text1.setTextColor("black")
+                text1.draw(win)
+                
+                # 后3个方块的边框
+                last_box_x1 = start_x + 3 * (box_size + margin)
+                last_box_x2 = start_x + 6 * (box_size + margin) - margin
+                last_center_x = (last_box_x1 + last_box_x2) / 2
+                
+                # 绘制后3位的边框
+                rect2 = Rectangle(Point(last_box_x1, decimal_y), Point(last_box_x2, decimal_y + decimal_box_height))
+                rect2.setOutline("black")
+                rect2.setFill("white")
+                rect2.draw(win)
+                
+                # 绘制后3位的数字
+                text2 = Text(Point(last_center_x, decimal_y + decimal_box_height/2), str(last_decimal))
+                text2.setSize(min(int(10 * scale_factor), 24))
+                text2.setTextColor("black")
+                text2.draw(win)
 
 def drawStaircase(x,y,step_len):
     """绘制楼梯，先生成完整颜色序列，再按序列绘制台阶"""
@@ -371,6 +446,11 @@ def drawStaircase(x,y,step_len):
     
     # 随机选择起点
     START_STEP_INDEX = random.randint(0, total_steps - 1)
+    
+    # 调试日志
+    print(f"[DEBUG] 总台阶数: {total_steps} (A={A-1}, D={D-1}, B={B-1}, C={C-1})")
+    print(f"[DEBUG] 起点索引(绘制顺序): {START_STEP_INDEX}")
+    print(f"[DEBUG] 颜色序列(绘制顺序): {STEP_COLORS}")
     
     drawStepsA(x,y,step_len)
 
@@ -496,7 +576,7 @@ def main():
     # 计算数列需要的额外高度 (台阶数量 / 6 行 * 每行高度)
     total_steps = A + B + C + D - 4  # 大约的台阶数
     seq_rows = (total_steps // 6) + 1
-    seq_height = seq_rows * (25 * scale_factor) + 30 * scale_factor
+    seq_height = seq_rows * (40 * scale_factor) + 30 * scale_factor  # 增加行高以适应十进制显示
     YH = stair_height + seq_height
     XO = 10 * scale_factor  # 缩放偏移量
     YO = (A*L*H*0.5)*ZM  # final y-offset
@@ -509,8 +589,8 @@ def main():
     message.setSize(min(10 * scale_factor, 36))  # 字体大小最大36
     message.draw(win)
     
-    # 绘制颜色序列
-    draw_sequence(stair_height + 10 * scale_factor, scale_factor)
+    # 绘制颜色序列（启用十进制转换显示）
+    draw_sequence(stair_height + 10 * scale_factor, scale_factor, show_decimal=True)
 
     # 检查是否有 -o 参数指定输出文件
     output_file = None
