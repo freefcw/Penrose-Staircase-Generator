@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.colors import ColorPalette, RGB
+from core.colors import ColorPalette
 from core.geometry import GeometryTransform, Point
 from core.staircase import StaircaseConfig, StaircaseModel, StepPosition
 
@@ -433,24 +433,49 @@ class StaircaseRenderer:
         self.canvas.draw_polygon(self.builder.build(), ColorPalette.WALL_FRONT)
 
     def _render_zone_labels(self) -> None:
-        """渲染区域标签 A、B、C、D"""
-        from graphics import GraphWin
-
-        # 获取窗口尺寸（需要通过画布访问）
-        if hasattr(self.canvas, "win") and isinstance(self.canvas.win, GraphWin):
-            width = self.canvas.win.getWidth()
-            height = self.canvas.win.getHeight()
-        else:
-            width, height = 400, 300
+        """渲染区域标签 A、B、C、D，放在每个区域中点外侧"""
+        A, B, C, D, L, U, H = self.A, self.B, self.C, self.D, self.L, self.U, self.H
 
         font_size = max(16, int(self.transform.scale / 1.5))
 
-        # 区域标签位置（使用窗口相对位置）
+        # === A区：从 (0,0) 到 A区最高点 ===
+        a_start = (0, 0)
+        a_end_x = (U * 0.5 * L) * (A - 1) + (U / 2) * (A - 1)
+        a_end_y = (H * L - H) * (A - 1)
+        a_mid = ((a_start[0] + a_end_x) / 2, (a_start[1] + a_end_y) / 2)
+        a_screen = self.transform.to_screen(a_mid[0], -a_mid[1])
+        a_label_pos = Point(a_screen.x, a_screen.y - 25)  # 向上偏移25
+
+        # === B区：从 A区终点 到 B区终点 ===
+        b_start_x = a_end_x + L * U
+        b_start_y = a_end_y + H * L
+        b_end_x = b_start_x + (L + U / 2) * (B - 1)
+        b_end_y = b_start_y - (B - 1) * H
+        b_mid = ((b_start_x + b_end_x) / 2, (b_start_y + b_end_y) / 2)
+        b_screen = self.transform.to_screen(b_mid[0], -b_mid[1])
+        b_label_pos = Point(b_screen.x, b_screen.y - 25)  # 向上偏移25
+
+        # === C区：从 B区终点 向右下延伸 ===
+        c_start_x = b_end_x
+        c_start_y = b_end_y
+        c_end_x = c_start_x - L * U * 0.5 * (C - 1) + (U / 2) * (C - 1)
+        c_end_y = c_start_y - (C - 1) * H * (L + 1)
+        c_mid = ((c_start_x + c_end_x) / 2, (c_start_y + c_end_y) / 2)
+        c_screen = self.transform.to_screen(c_mid[0], -c_mid[1])
+        c_label_pos = Point(c_screen.x + 15, c_screen.y + 35)  # 向右下偏移
+
+        # === D区：前墙底部的台阶 ===
+        # D区在前墙（蓝色）前面，从原点(0,0)向左延伸
+        d_mid_x = L * (D - 1) / 2  # D区中点X（向右为正）
+        d_mid_y = -H * (D - 1) / 2  # D区中点Y（向下为负）
+        d_screen = self.transform.to_screen(d_mid_x, -d_mid_y)
+        d_label_pos = Point(d_screen.x, d_screen.y + 8)  # 向下偏移8
+
         labels = [
-            (Point(80, 40), "A"),  # 左上
-            (Point(width - 80, 80), "B"),  # 右上
-            (Point(width - 80, height / 2), "C"),  # 右下
-            (Point(100, height / 2 - 50), "D"),  # 左下
+            (a_label_pos, "A"),
+            (b_label_pos, "B"),
+            (c_label_pos, "C"),
+            (d_label_pos, "D"),
         ]
 
         for pos, label in labels:

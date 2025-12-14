@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
+
+from typing_extensions import override
 
 from core.colors import RGB
 from core.geometry import Point
@@ -55,6 +57,7 @@ class Canvas(ABC):
         ...
 
 
+@final
 class GraphicsCanvas(Canvas):
     """
     graphics.py 库的具体实现
@@ -90,6 +93,7 @@ class GraphicsCanvas(Canvas):
         """将RGB转换为graphics颜色"""
         return self._color_rgb(rgb.r, rgb.g, rgb.b)
 
+    @override
     def draw_polygon(
         self, points: list[Point], fill: RGB, outline: RGB | None = None
     ) -> None:
@@ -98,14 +102,16 @@ class GraphicsCanvas(Canvas):
         poly.setFill(self._to_color(fill))
         if outline:
             poly.setOutline(self._to_color(outline))
-        poly.draw(self.win)
+        _ = poly.draw(self.win)
 
+    @override
     def draw_line(self, p1: Point, p2: Point, color: RGB, width: int = 1) -> None:
         line = self._Line(self._to_gpoint(p1), self._to_gpoint(p2))
         line.setOutline(self._to_color(color))
         line.setWidth(width)
-        line.draw(self.win)
+        _ = line.draw(self.win)
 
+    @override
     def draw_text(
         self,
         position: Point,
@@ -123,8 +129,9 @@ class GraphicsCanvas(Canvas):
         text_obj.setFace(face)
         if style != "normal":
             text_obj.setStyle(style)
-        text_obj.draw(self.win)
+        _ = text_obj.draw(self.win)
 
+    @override
     def draw_rectangle(
         self, p1: Point, p2: Point, fill: RGB, outline: RGB, width: int = 1
     ) -> None:
@@ -132,4 +139,6 @@ class GraphicsCanvas(Canvas):
         rect.setFill(self._to_color(fill))
         rect.setOutline(self._to_color(outline))
         rect.setWidth(width)
-        rect.draw(self.win)
+        _ = rect.draw(self.win)
+
+

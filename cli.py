@@ -58,10 +58,10 @@ def calculate_window_dimensions(
     window_width = (A * L + B * L) * zoom
     stair_height = (A * H * L + B * H * L) * zoom
 
-    # 序列显示区域高度
+    # 序列显示区域高度（减少空白）
     total_steps = config.total_steps
     seq_rows = (total_steps // 6) + 1
-    seq_height = seq_rows * (40 * scale) + 30 * scale
+    seq_height = seq_rows * (30 * scale) + 5 * scale
 
     window_height = stair_height + seq_height
 
@@ -144,7 +144,7 @@ def main() -> int:
     seq_renderer.render(
         model.color_sequence,
         model.start_step_index,
-        stair_height + 10 * scale,
+        stair_height - 30 * scale,
         scale,
         show_decimal=True,
     )

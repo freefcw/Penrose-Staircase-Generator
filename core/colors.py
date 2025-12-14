@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from typing import ClassVar, final
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class RGB:
         return f"#{self.r:02x}{self.g:02x}{self.b:02x}"
 
 
+@final
 class ColorPalette:
     """
     Penrose楼梯配色方案
@@ -31,18 +33,18 @@ class ColorPalette:
     """
 
     # 台阶颜色
-    STEP_GRAY = RGB(128, 128, 128)
-    STEP_RED = RGB(220, 60, 60)
+    STEP_GRAY: ClassVar[RGB] = RGB(128, 128, 128)
+    STEP_RED: ClassVar[RGB] = RGB(220, 60, 60)
 
     # 墙体颜色
-    WALL_FRONT = RGB(0, 0, 255)  # 前墙（蓝色）
-    WALL_SIDE = RGB(255, 255, 0)  # 侧墙（黄色）
-    WALL_GREEN = RGB(0, 255, 0)  # 绿色（未使用）
+    WALL_FRONT: ClassVar[RGB] = RGB(0, 0, 255)  # 前墙（蓝色）
+    WALL_SIDE: ClassVar[RGB] = RGB(255, 255, 0)  # 侧墙（黄色）
+    WALL_GREEN: ClassVar[RGB] = RGB(0, 255, 0)  # 绿色（未使用）
 
     # UI颜色
-    TEXT_BLACK = RGB(0, 0, 0)
-    TEXT_WHITE = RGB(255, 255, 255)
-    MARKER_WHITE = RGB(255, 255, 255)
+    TEXT_BLACK: ClassVar[RGB] = RGB(0, 0, 0)
+    TEXT_WHITE: ClassVar[RGB] = RGB(255, 255, 255)
+    MARKER_WHITE: ClassVar[RGB] = RGB(255, 255, 255)
 
     @classmethod
     def get_step_color(cls, is_red: bool) -> RGB:
@@ -50,12 +52,15 @@ class ColorPalette:
         return cls.STEP_RED if is_red else cls.STEP_GRAY
 
 
+@final
 class ColorSequence:
     """
     台阶颜色序列生成器
 
     负责生成和管理台阶的颜色序列
     """
+
+    count: int
 
     def __init__(self, count: int, seed: int | None = None):
         """

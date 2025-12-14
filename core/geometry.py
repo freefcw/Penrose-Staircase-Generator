@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import ClassVar, final
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class Point:
         return (self.x, self.y)
 
 
+@final
 class GeometryTransform:
     """
     几何变换器
@@ -36,8 +38,12 @@ class GeometryTransform:
     - 模型坐标到屏幕坐标的转换
     """
 
-    UNIT_WIDTH: float = 1.0
-    UNIT_HEIGHT: float = 0.866025404  # sqrt(3)/2，等边三角形高度比
+    UNIT_WIDTH: ClassVar[float] = 1.0
+    UNIT_HEIGHT: ClassVar[float] = 0.866025404  # sqrt(3)/2，等边三角形高度比
+
+    scale: float
+    offset_x: float
+    offset_y: float
 
     def __init__(self, scale: float, offset_x: float, offset_y: float):
         """
