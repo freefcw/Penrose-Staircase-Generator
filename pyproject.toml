@@ -1,0 +1,20 @@
+[project]
+name = "penrose"
+version = "0.1.0"
+description = "Penrose Staircase Generator - 彭罗斯楼梯生成器"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "graphics-py>=5.0.1.post1",
+    "pillow>=12.0.0",
+]
+
+[project.scripts]
+penrose-stair = "vpstairs:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

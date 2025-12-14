@@ -9,8 +9,32 @@
 
 import sys
 import math
+import random
+import os
 import pstairs
 from graphics import *
+from PIL import Image, EpsImagePlugin
+
+# 设置 Ghostscript 路径 (macOS 通常在 /usr/local/bin/gs 或通过 brew 安装)
+# 如果没有安装 Ghostscript，可通过 `brew install ghostscript` 安装
+EpsImagePlugin.gs_windows_binary = None  # 非 Windows 系统
+
+def save_as_image(win, filename):
+    """将图形窗口保存为 PNG 图片"""
+    # 先保存为 PostScript 格式
+    ps_filename = filename.replace('.png', '.ps')
+    win.postscript(file=ps_filename, colormode='color')
+    
+    # 使用 PIL 转换为 PNG
+    try:
+        img = Image.open(ps_filename)
+        img.save(filename, 'PNG')
+        os.remove(ps_filename)  # 删除临时 PS 文件
+        print(f"图片已保存: {filename}")
+    except Exception as e:
+        print(f"保存图片失败: {e}")
+        print(f"PostScript 文件已保存: {ps_filename}")
+        print("提示: 如需转换为 PNG，请安装 Ghostscript: brew install ghostscript")
 
 
 
@@ -63,8 +87,9 @@ def S(l,x,y):
     LINETO(x+U*0.5*l,y+(H*l))
     LINETO(x+U*0.5*l+U*l,y+(H*l))
     LINETO(x+U*l,y+0)
-    global color1
-    CLOSEPOLY(color1)
+    # 随机选择灰色或红色
+    step_color = random.choice([color_gray, color_red])
+    CLOSEPOLY(step_color)
 
 def drawStepsA(x,y,len):
     for i in range(A-1,-1,-1):
@@ -201,6 +226,9 @@ def drawStaircase(x,y,len):
 color1=color_rgb(0,255,0)
 color2=color_rgb(0,0,255)
 color3=color_rgb(255,255,0)
+# 台阶随机颜色：灰色和红色
+color_gray=color_rgb(128,128,128)
+color_red=color_rgb(220,60,60)
 XC=0
 YC=0
 U = 1
@@ -239,6 +267,15 @@ def main():
         print ("usage: python vpstairs.py -n <the n-th Penrose-Staircase>")
         sys.exit(1)
     
+    # 检查是否有 -s 缩放参数
+    scale_factor = 1
+    if "-s" in sys.argv:
+        try:
+            idx = sys.argv.index("-s")
+            scale_factor = int(sys.argv[idx + 1])
+        except (IndexError, ValueError):
+            scale_factor = 1
+    
     global A,B,C,D,L,WH,ZM,PLIST,XH,YH,XO,YO,win
     A=PS.a
     B=PS.b
@@ -246,21 +283,34 @@ def main():
     D=PS.d
     L = PS.l
     WH = D*2
-    ZM = 11/((A+B+C+D+L-4)*0.1)
+    ZM = 11/((A+B+C+D+L-4)*0.1) * scale_factor  # 应用缩放因子
     PLIST=[]
     XH = (A*L+B*L)*ZM
     YH = (A*H*L+B*H*L)*ZM
-    XO = 10 #final x-offset
-    YO = (A*L*H*0.5)*ZM #final y-offset
-    print("The Penrose-Staircase Nr.", int(sys.argv[1]), " is: ", A, B, C, D, "(", L, ")")
+    XO = 10 * scale_factor  # 缩放偏移量
+    YO = (A*L*H*0.5)*ZM  # final y-offset
+    print("The Penrose-Staircase Nr.", int(sys.argv[1]), " is: ", A, B, C, D, "(", L, ")", f"缩放: {scale_factor}x")
     win = GraphWin("Penrose-Staircase Generator v1.0", XH,YH)
     drawStaircase(0,0,L)
     str = "n=",int(sys.argv[1]),"ratio:", A, B, C, D, "(",L,")"
-    message = Text(Point(XH/2,5), str)
+    message = Text(Point(XH/2, 5 * scale_factor), str)
     message.setFace("courier")
-    message.setSize(10)
+    message.setSize(min(10 * scale_factor, 36))  # 字体大小最大36
     message.draw(win)
 
+    # 检查是否有 -o 参数指定输出文件
+    output_file = None
+    if "-o" in sys.argv:
+        try:
+            idx = sys.argv.index("-o")
+            output_file = sys.argv[idx + 1]
+        except (IndexError, ValueError):
+            print("用法: python vpstairs.py <n> [-o <输出文件.png>]")
+    
+    if output_file:
+        # 保存图片
+        save_as_image(win, output_file)
+    
     try:
         win.getMouse() # Pause to view result
     except GraphicsError:
@@ -268,4 +318,5 @@ def main():
     
     win.close()    # Close window when done
 
-main()
+if __name__ == "__main__":
+    main()
