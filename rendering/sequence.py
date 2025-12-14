@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.colors import ColorPalette, RGB
+from core.colors import ColorPalette
 from core.geometry import Point
 from core.staircase import StaircaseConfig
 
@@ -150,11 +150,19 @@ class SequenceRenderer:
         if show_decimal:
             row_height = box_size + margin + 15 * scale
 
+        # 根据主题决定样式（只有classic使用完整边框样式）
+        is_simple_style = ColorPalette.get_theme() != "classic"
+
         # 绘制标题
         hint_pos = Point(self.window_width / 2, start_y - 15 * scale)
-        hint_text = f"台阶序列 (共{len(ordered)}级, 从★开始)"
+        if is_simple_style:
+            hint_text = f"台阶序列 (共{len(ordered)}级)"
+            title_color = ColorPalette.TEXT_LIGHT
+        else:
+            hint_text = f"台阶序列 (共{len(ordered)}级, 从★开始)"
+            title_color = ColorPalette.TEXT_BLACK
         self.canvas.draw_text(
-            hint_pos, hint_text, min(int(12 * scale), 30), ColorPalette.TEXT_BLACK
+            hint_pos, hint_text, min(int(12 * scale), 30), title_color
         )
 
         num_rows = (len(ordered) + self.COLS - 1) // self.COLS
@@ -170,9 +178,12 @@ class SequenceRenderer:
             color = ColorPalette.STEP_RED if is_red else ColorPalette.STEP_GRAY
             p1 = Point(x, y)
             p2 = Point(x + box_size, y + box_size)
-            self.canvas.draw_rectangle(
-                p1, p2, color, ColorPalette.TEXT_BLACK, max(1, int(scale))
-            )
+            if is_simple_style:
+                self.canvas.draw_rectangle(p1, p2, color, color, 0)  # 无边框
+            else:
+                self.canvas.draw_rectangle(
+                    p1, p2, color, ColorPalette.TEXT_BLACK, max(1, int(scale))
+                )
 
             # 绘制数字 (0或1)
             text_pos = Point(x + box_size / 2, y + box_size / 2)
@@ -199,6 +210,10 @@ class SequenceRenderer:
         num_rows: int,
     ) -> None:
         """绘制十进制转换值"""
+        from core.colors import RGB
+
+        is_simple_style = ColorPalette.get_theme() != "classic"
+
         for row in range(num_rows):
             row_start = row * self.COLS
             row_end = min(row_start + self.COLS, len(ordered))
@@ -224,38 +239,40 @@ class SequenceRenderer:
                 decimal_y = start_y + row * row_height + box_size + 2 * scale
                 decimal_box_height = 12 * scale
 
-                # 前3位边框
+                # 前3位
                 first_box_x1 = start_x
                 first_box_x2 = start_x + 3 * (box_size + margin) - margin
                 first_center_x = (first_box_x1 + first_box_x2) / 2
 
-                self.canvas.draw_rectangle(
-                    Point(first_box_x1, decimal_y),
-                    Point(first_box_x2, decimal_y + decimal_box_height),
-                    RGB(255, 255, 255),
-                    ColorPalette.TEXT_BLACK,
-                )
+                if not is_simple_style:
+                    self.canvas.draw_rectangle(
+                        Point(first_box_x1, decimal_y),
+                        Point(first_box_x2, decimal_y + decimal_box_height),
+                        RGB(255, 255, 255),
+                        ColorPalette.TEXT_BLACK,
+                    )
                 self.canvas.draw_text(
                     Point(first_center_x, decimal_y + decimal_box_height / 2),
                     str(first_decimal),
                     min(int(10 * scale), 24),
-                    ColorPalette.TEXT_BLACK,
+                    ColorPalette.TEXT_LIGHT if is_simple_style else ColorPalette.TEXT_BLACK,
                 )
 
-                # 后3位边框
+                # 后3位
                 last_box_x1 = start_x + 3 * (box_size + margin)
                 last_box_x2 = start_x + 6 * (box_size + margin) - margin
                 last_center_x = (last_box_x1 + last_box_x2) / 2
 
-                self.canvas.draw_rectangle(
-                    Point(last_box_x1, decimal_y),
-                    Point(last_box_x2, decimal_y + decimal_box_height),
-                    RGB(255, 255, 255),
-                    ColorPalette.TEXT_BLACK,
-                )
+                if not is_simple_style:
+                    self.canvas.draw_rectangle(
+                        Point(last_box_x1, decimal_y),
+                        Point(last_box_x2, decimal_y + decimal_box_height),
+                        RGB(255, 255, 255),
+                        ColorPalette.TEXT_BLACK,
+                    )
                 self.canvas.draw_text(
                     Point(last_center_x, decimal_y + decimal_box_height / 2),
                     str(last_decimal),
                     min(int(10 * scale), 24),
-                    ColorPalette.TEXT_BLACK,
+                    ColorPalette.TEXT_LIGHT if is_simple_style else ColorPalette.TEXT_BLACK,
                 )

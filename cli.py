@@ -18,7 +18,7 @@ import sys
 from graphics import GraphWin, GraphicsError
 
 import pstairs
-from core.colors import ColorSequence
+from core.colors import ColorPalette, ColorSequence
 from core.geometry import GeometryTransform
 from core.staircase import StaircaseConfig, StaircaseModel
 from export.exporter import ImageExporter
@@ -36,6 +36,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("n", type=int, help="第n个Penrose楼梯")
     parser.add_argument("-s", "--scale", type=int, default=1, help="缩放因子 (默认: 1)")
     parser.add_argument("-o", "--output", type=str, help="输出PNG文件路径")
+    parser.add_argument(
+        "-t", "--theme",
+        type=str,
+        choices=["classic", "minimal", "professional", "artistic"],
+        default="minimal",
+        help="主题样式: classic(经典), minimal(简约,默认), professional(专业), artistic(艺术)"
+    )
     return parser.parse_args()
 
 
@@ -83,6 +90,9 @@ def main() -> int:
         print(f"错误: 无法计算第 {args.n} 个Penrose楼梯: {e}")
         return 1
 
+    # 设置主题
+    ColorPalette.set_theme(args.theme)
+
     # 创建配置
     config = StaircaseConfig(ps.a, ps.b, ps.c, ps.d, ps.l)
     scale = args.scale
@@ -125,17 +135,17 @@ def main() -> int:
     renderer = StaircaseRenderer(canvas, transform, config, model)
     renderer.render(model.start_step_index)
 
-    # 显示标题
-    title = f"n={args.n} ratio: {config.a} {config.b} {config.c} {config.d} ({config.step_length})"
-    from core.colors import ColorPalette
-    from core.geometry import Point
-    canvas.draw_text(
-        Point(window_width / 2, 5 * scale),
-        title,
-        min(10 * scale, 36),
-        ColorPalette.TEXT_BLACK,
-        face="courier",
-    )
+    # 经典主题显示标题
+    if args.theme == "classic":
+        from core.geometry import Point
+        title = f"n={args.n} ratio: {config.a} {config.b} {config.c} {config.d} ({config.step_length})"
+        canvas.draw_text(
+            Point(window_width / 2, 5 * scale),
+            title,
+            min(10 * scale, 36),
+            ColorPalette.TEXT_BLACK,
+            face="courier",
+        )
 
     # 渲染颜色序列
     stair_height = (config.a * GeometryTransform.UNIT_HEIGHT * config.step_length +

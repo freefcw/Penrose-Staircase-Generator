@@ -480,5 +480,5 @@ class StaircaseRenderer:
 
         for pos, label in labels:
             self.canvas.draw_text(
-                pos, label, font_size, ColorPalette.TEXT_BLACK, style="bold"
+                pos, label, font_size, ColorPalette.TEXT_LIGHT, style="bold"
             )
