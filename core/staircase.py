@@ -90,8 +90,12 @@ class StaircaseModel:
 
     config: StaircaseConfig
     step_positions: list[StepPosition] = field(default_factory=list)
+    # 绘制顺序的颜色序列（用于渲染）
     color_sequence: list[bool] = field(default_factory=list)
     start_step_index: int = 0
+    # 行走顺序的颜色序列（用于步进面板）
+    walking_order_colors: list[bool] = field(default_factory=list)
+    walking_order_start: int = 0
 
     def clear_positions(self):
         """清空位置数据"""

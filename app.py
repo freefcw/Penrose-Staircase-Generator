@@ -1,28 +1,23 @@
 """
 应用程序模块 - Penrose 楼梯生成器的主应用类
 
-遵循单一职责原则，将 CLI 的职责拆分为：
-- CLI：参数解析
-- PenroseApp：应用程序协调
+重构后的版本，将职责拆分为多个服务类：
+- StateManager: 状态管理
+- RenderingService: 渲染协调
+- EventProcessor: 事件处理
 """
 from __future__ import annotations
 
 import logging
-import time
 
-from graphics import GraphWin, GraphicsError
+from graphics import GraphWin
 
-from core.calculator import PenroseCalculator
-from core.colors import ColorSequence
 from core.config import AppConfig
-from core.geometry import GeometryTransform, Point
-from core.layout import LayoutConstants
-from core.staircase import StaircaseConfig, StaircaseModel
+from core.services.state_manager import StateManager
+from core.services.rendering_service import RenderingService, LayoutInfo
+from core.services.event_processor import EventProcessor
 from core.theme import Theme
 from export.exporter import ImageExporter
-from rendering.canvas import GraphicsCanvas
-from rendering.renderer import StaircaseRenderer
-from rendering.sequence import SequenceRenderer
 from ui.control_panel import ControlPanel, PanelState
 from ui.step_panel import StepControlPanel
 
@@ -30,70 +25,47 @@ from ui.step_panel import StepControlPanel
 logger = logging.getLogger(__name__)
 
 
-class LayoutInfo:
-    """窗口布局信息"""
-
-    def __init__(
-        self,
-        window_width: float,
-        window_height: float,
-        stair_height: float,
-        zoom: float,
-        offset_x: float,
-        offset_y: float,
-    ):
-        self.window_width = window_width
-        self.window_height = window_height
-        self.stair_height = stair_height
-        self.zoom = zoom
-        self.offset_x = offset_x
-        self.offset_y = offset_y
-
-
 class PenroseApp:
     """
     Penrose 楼梯生成器应用程序
-
-    职责：
-    - 协调楼梯计算、渲染和导出
-    - 管理窗口生命周期
-    - 集成控制面板实现交互式操作
+    
+    职责（重构后）：
+    - 协调各服务完成功能
+    - 管理 UI 面板的创建和回调
+    - 管理窗口的创建和关闭
+    
+    已拆分的职责：
+    - 状态管理 → StateManager
+    - 渲染协调 → RenderingService
+    - 事件处理 → EventProcessor
     """
-
-    # 事件循环间隔（毫秒）
-    EVENT_LOOP_INTERVAL = 50
 
     def __init__(self, config: AppConfig):
         """
         初始化应用程序
-
+        
         Args:
             config: 应用程序配置
         """
         self.config = config
+        
+        # 初始化服务
+        self._state = StateManager(
+            n=config.n,
+            theme=config.theme,
+            export_scale=config.scale,
+        )
+        self._events = EventProcessor(on_close=self._cleanup)
+        
+        # UI 组件
         self._win: GraphWin | None = None
         self._control_panel: ControlPanel | None = None
-        self._should_close = False
-        
-        # 当前状态
-        self._current_n = config.n
-        self._current_theme = config.theme
-        self._export_scale = config.scale  # 导出缩放（仅用于导出）
-        
-        # 预览缩放固定为 1.6（预览窗口大小）
-        self._preview_scale = 1.6
-        
-        # 缓存当前的楼梯配置和模型（用于保存后刷新显示）
-        self._cached_stair_config: StaircaseConfig | None = None
-        self._cached_model: StaircaseModel | None = None
-        
-        # 步进控制面板
         self._step_panel: StepControlPanel | None = None
 
     def run(self) -> int:
         """
         运行应用程序
-
+        
         Returns:
             退出码，0 表示成功
         """
@@ -108,35 +80,39 @@ class PenroseApp:
         # 交互模式：先弹出控制面板
         self._create_control_panel()
         
-        # 进入事件循环（主窗口会在点击应用后创建）
-        self._event_loop()
+        # 进入事件循环
+        self._run_event_loop()
 
         # 清理
         self._cleanup()
         return 0
 
+    # === 初始化方法 ===
+
     def _initial_render(self) -> bool:
         """执行初始渲染"""
-        stair_config = self._calculate_staircase()
-        if stair_config is None:
+        data = self._state.compute_and_cache()
+        if data is None:
             return False
+        
+        config, model = data
+        layout = RenderingService.calculate_layout(config, self._state.preview_scale)
+        self._print_info(config)
 
-        layout = self._calculate_layout(stair_config)
-        self._print_info(stair_config)
-
-        # 创建窗口和画布
+        # 创建窗口和渲染
         self._win = self._create_window(layout)
-
-        # 渲染
-        self._do_render(stair_config, layout, scale=self._preview_scale)
+        RenderingService.render_to_window(
+            self._win, config, model, layout,
+            self._state.theme, self._state.n, self._state.preview_scale
+        )
         return True
 
     def _create_control_panel(self) -> None:
         """创建控制面板"""
         initial_state = PanelState(
-            n=self._current_n,
-            theme=self._current_theme.name.value,
-            scale=self._export_scale,  # 导出缩放
+            n=self._state.n,
+            theme=self._state.theme.name.value,
+            scale=self._state.export_scale,
         )
 
         self._control_panel = ControlPanel(
@@ -145,56 +121,43 @@ class PenroseApp:
             on_generate=self._handle_generate,
             on_export=self._handle_export,
             on_close=self._handle_close,
+            on_export_config=self._handle_export_config,
+            on_import_config=self._handle_import_config,
         )
         self._control_panel.show()
 
-    def _event_loop(self) -> None:
-        """事件循环 - 处理用户交互"""
-        while not self._should_close:
-            # 检查主窗口是否关闭（只在窗口存在时检查）
-            if self._win is not None and self._win.isClosed():
-                break
+    # === 事件循环 ===
 
-            # 检查键盘事件（只在窗口存在时检查）
-            if self._win is not None:
-                try:
-                    key = self._win.checkKey()
-                    if key and key.lower() == 'q':
-                        break
-                except GraphicsError:
-                    break
+    def _run_event_loop(self) -> None:
+        """运行事件循环"""
+        updatables = []
+        if self._control_panel:
+            updatables.append(self._control_panel)
+        
+        self._events.run_loop(self._win, updatables)
 
-            # 更新控制面板
-            if self._control_panel:
-                self._control_panel.update()
-                if self._control_panel.is_closed():
-                    break
-
-            # 避免 CPU 占用过高
-            time.sleep(self.EVENT_LOOP_INTERVAL / 1000.0)
+    # === 回调处理 ===
 
     def _handle_save(self, state: PanelState) -> None:
         """处理保存按钮回调 - 仅保存设置，不刷新数据"""
-        # 更新主题和缩放设置（不更新 N，因为 N 的改变需要重新生成）
-        self._current_theme = Theme.get_by_name(state.theme)
-        self._export_scale = state.scale  # 导出缩放
+        new_theme = Theme.get_by_name(state.theme)
+        self._state.update_theme(new_theme)
+        self._state.update_export_scale(state.scale)
         
-        # 调试输出
-        print(f"[DEBUG] 保存: theme={state.theme}, export_scale={state.scale} -> {self._current_theme.name.value}")
+        print(f"[DEBUG] 保存: theme={state.theme}, export_scale={state.scale}")
 
-        # 如果已有窗口，使用新主题重新渲染（但不重新计算数据）
+        # 如果已有窗口，使用新主题重新渲染
         if self._win and not self._win.isClosed():
             self._refresh_display()
-    
+
     def _handle_generate(self, state: PanelState) -> None:
         """处理生成按钮回调 - 重新生成数据"""
-        # 更新所有状态
-        self._current_n = state.n
-        self._current_theme = Theme.get_by_name(state.theme)
-        self._export_scale = state.scale  # 导出缩放
+        new_theme = Theme.get_by_name(state.theme)
+        self._state.update_n(state.n)
+        self._state.update_theme(new_theme)
+        self._state.update_export_scale(state.scale)
         
-        # 调试输出
-        print(f"[DEBUG] 生成: n={state.n}, theme={state.theme}, export_scale={state.scale} -> {self._current_theme.name.value}")
+        print(f"[DEBUG] 生成: n={state.n}, theme={state.theme}, export_scale={state.scale}")
 
         # 重新计算并渲染
         self._redraw()
@@ -203,295 +166,199 @@ class PenroseApp:
         self._create_step_panel()
 
     def _handle_export(self, file_path: str) -> None:
-        """处理导出按钮回调 - 使用用户设置的缩放"""
-        stair_config = self._calculate_staircase()
-        if stair_config is None:
+        """处理导出按钮回调"""
+        data = self._state.get_or_compute()
+        if data is None:
             return
-            
-        # 使用导出缩放创建临时窗口
-        layout = self._calculate_layout(stair_config, scale=self._export_scale)
         
-        print(f"[DEBUG] 导出窗口大小: {int(layout.window_width)}x{int(layout.window_height)}")
-        
-        # 创建临时窗口用于导出
-        export_win = GraphWin(
-            "Exporting...",
-            int(layout.window_width),
-            int(layout.window_height),
+        config, model = data
+        RenderingService.export_to_file(
+            config, model, self._state.theme,
+            self._state.n, self._state.export_scale, file_path
         )
-        
-        # 渲染到临时窗口
-        canvas = GraphicsCanvas(export_win)
-        transform = GeometryTransform(layout.zoom, layout.offset_x, layout.offset_y)
-        model = self._create_model(stair_config)
-        self._render(canvas, transform, stair_config, model, layout, scale=self._export_scale)
-        
-        # 确保渲染完成
-        export_win.update()
-        time.sleep(0.1)  # 短暂延迟确保绘制完成
-        
-        # 导出
-        ImageExporter.save_as_png(export_win, file_path)
-        
-        # 关闭临时窗口
-        export_win.close()
-        
-        print(f"导出完成: {file_path} (缩放: {self._export_scale}x)")
+        print(f"导出完成: {file_path} (缩放: {self._state.export_scale}x)")
 
     def _handle_close(self) -> None:
         """处理关闭按钮回调"""
-        self._should_close = True
+        self._events.request_close()
+    
+    def _handle_export_config(self, file_path: str) -> None:
+        """处理导出配置回调"""
+        model = self._state.cached_model
+        config = self._state.cached_config
+        if model is None or config is None:
+            print("[导出配置] 没有可导出的数据")
+            return
+        
+        from core.config_io import SessionConfig, ConfigExporter
+        
+        session_config = SessionConfig(
+            n=self._state.n,
+            theme=self._state.theme.name.value,
+            color_sequence=model.color_sequence,
+            start_step_index=model.start_step_index,
+            walking_order_colors=model.walking_order_colors,
+            walking_order_start=model.walking_order_start,
+            a=config.a,
+            b=config.b,
+            c=config.c,
+            d=config.d,
+            step_length=config.step_length,
+        )
+        ConfigExporter.export_to_file(session_config, file_path)
+    
+    def _handle_import_config(self, file_path: str) -> None:
+        """处理导入配置回调"""
+        from core.config_io import ConfigExporter
+        from core.staircase import StaircaseConfig, StaircaseModel
+        
+        session_config = ConfigExporter.import_from_file(file_path)
+        if session_config is None:
+            return
+        
+        # 更新状态
+        self._state.update_n(session_config.n)
+        new_theme = Theme.get_by_name(session_config.theme)
+        self._state.update_theme(new_theme)
+        
+        # 创建配置和模型
+        config = StaircaseConfig(
+            a=session_config.a,
+            b=session_config.b,
+            c=session_config.c,
+            d=session_config.d,
+            step_length=session_config.step_length,
+        )
+        model = StaircaseModel(config)
+        model.color_sequence = session_config.color_sequence
+        model.start_step_index = session_config.start_step_index
+        model.walking_order_colors = session_config.walking_order_colors
+        model.walking_order_start = session_config.walking_order_start
+        
+        # 直接设置缓存
+        self._state._cached_config = config
+        self._state._cached_model = model
+        
+        # 重新渲染
+        self._refresh_display()
+        self._create_step_panel()
+        
+        print(f"[导入配置] 已加载: n={session_config.n}, 主题={session_config.theme}")
+
+    # === 渲染方法 ===
 
     def _redraw(self) -> None:
-        """重新计算并渲染（使用预览缩放）"""
-        stair_config = self._calculate_staircase()
-        if stair_config is None:
+        """重新计算并渲染"""
+        data = self._state.compute_and_cache()
+        if data is None:
             return
 
-        # 缓存配置和模型
-        self._cached_stair_config = stair_config
-        self._cached_model = self._create_model(stair_config)
-
-        layout = self._calculate_layout(stair_config, scale=self._preview_scale)
+        config, model = data
+        layout = RenderingService.calculate_layout(config, self._state.preview_scale)
 
         # 关闭旧窗口，创建新窗口
         if self._win and not self._win.isClosed():
             self._win.close()
 
         self._win = self._create_window(layout)
-        self._do_render_with_model(stair_config, self._cached_model, layout, scale=self._preview_scale)
-        self._print_info(stair_config)
-    
+        RenderingService.render_to_window(
+            self._win, config, model, layout,
+            self._state.theme, self._state.n, self._state.preview_scale
+        )
+        self._print_info(config)
+
     def _refresh_display(self) -> None:
-        """仅刷新显示（应用主题等变化），不重新计算数据"""
-        if self._cached_stair_config is None or self._cached_model is None:
-            # 没有缓存数据时，执行完整重绘
+        """仅刷新显示，不重新计算数据"""
+        if not self._state.has_valid_cache():
             self._redraw()
             return
         
-        layout = self._calculate_layout(self._cached_stair_config, scale=self._preview_scale)
+        config = self._state.cached_config
+        model = self._state.cached_model
+        if config is None or model is None:
+            return
+        
+        layout = RenderingService.calculate_layout(config, self._state.preview_scale)
 
         # 关闭旧窗口，创建新窗口
         if self._win and not self._win.isClosed():
             self._win.close()
 
         self._win = self._create_window(layout)
-        self._do_render_with_model(self._cached_stair_config, self._cached_model, layout, scale=self._preview_scale)
-        self._print_info(self._cached_stair_config)
-    
+        RenderingService.render_to_window(
+            self._win, config, model, layout,
+            self._state.theme, self._state.n, self._state.preview_scale
+        )
+        self._print_info(config)
+
+    # === 步进面板 ===
+
     def _create_step_panel(self) -> None:
         """创建步进控制面板"""
-        if self._cached_model is None:
+        model = self._state.cached_model
+        if model is None:
             return
         
-        # 关闭旧的步进面板
-        if self._step_panel and not self._step_panel.is_closed():
-            pass  # 保持打开，会自动更新
-        
-        # 获取控制面板的 Tk 根窗口作为父窗口
         parent = None
         if self._control_panel and hasattr(self._control_panel, '_root'):
             parent = self._control_panel._root
         
-        # 创建新面板
         self._step_panel = StepControlPanel(
-            total_steps=self._cached_model.config.total_steps,
-            start_index=self._cached_model.start_step_index,
-            color_sequence=self._cached_model.color_sequence,
+            total_steps=model.config.total_steps,
+            start_index=model.walking_order_start,  # 使用行走顺序的起点
+            color_sequence=model.walking_order_colors,  # 使用行走顺序的颜色
             on_step_change=self._handle_step_change,
         )
         self._step_panel.show(parent)
-    
+
     def _handle_step_change(self, new_index: int) -> None:
         """处理步进位置变化"""
-        # 目前只打印调试信息，后续可扩展为在图上标记当前位置
-        if self._cached_model:
-            color = 1 if self._cached_model.color_sequence[new_index] else 0
-            print(f"[步进] 位置: {new_index + 1}/{self._cached_model.config.total_steps}, 颜色: {color}")
+        model = self._state.cached_model
+        if model:
+            color = 1 if model.color_sequence[new_index] else 0
+            print(f"[步进] 位置: {new_index + 1}/{model.config.total_steps}, 颜色: {color}")
 
-    def _do_render(self, stair_config: StaircaseConfig, layout: LayoutInfo, scale: float = 1.0) -> None:
-        """执行实际渲染（创建新模型）"""
-        model = self._create_model(stair_config)
-        self._do_render_with_model(stair_config, model, layout, scale=scale)
-    
-    def _do_render_with_model(
-        self, 
-        stair_config: StaircaseConfig, 
-        model: StaircaseModel,
-        layout: LayoutInfo, 
-        scale: float = 1.0
-    ) -> None:
-        """使用已有模型执行渲染"""
-        if not self._win:
-            return
-
-        canvas = GraphicsCanvas(self._win)
-        transform = GeometryTransform(layout.zoom, layout.offset_x, layout.offset_y)
-
-        self._render(canvas, transform, stair_config, model, layout, scale=scale)
-
-    def _cleanup(self) -> None:
-        """清理资源"""
-        if self._win and not self._win.isClosed():
-            self._win.close()
-
-    def _calculate_staircase(self) -> StaircaseConfig | None:
-        """计算楼梯参数"""
-        try:
-            result = PenroseCalculator.calculate(self._current_n)
-            return result.to_config()
-        except ValueError as e:
-            print(f"错误: {e}")
-            return None
-
-    def _calculate_layout(self, stair_config: StaircaseConfig, scale: float = 1.0) -> LayoutInfo:
-        """计算窗口布局"""
-        A, B, C, D, L = (
-            stair_config.a,
-            stair_config.b,
-            stair_config.c,
-            stair_config.d,
-            stair_config.step_length,
-        )
-        H = GeometryTransform.UNIT_HEIGHT
-
-        # 缩放因子
-        zoom = LayoutConstants.ZOOM_BASE / (
-            (A + B + C + D + L - 4) * LayoutConstants.ZOOM_DIVISOR
-        ) * scale
-
-        # 窗口尺寸
-        window_width = (A * L + B * L) * zoom
-        stair_height = (A * H * L + B * H * L) * zoom
-
-        # 序列显示区域高度
-        total_steps = stair_config.total_steps
-        seq_rows = (total_steps // LayoutConstants.SEQUENCE_COLS) + 1
-        seq_height = (
-            seq_rows * (LayoutConstants.SEQUENCE_ROW_HEIGHT_FACTOR * scale)
-            + LayoutConstants.SEQUENCE_AREA_PADDING * scale
-        )
-
-        window_height = stair_height + seq_height
-
-        # 偏移量
-        offset_x = LayoutConstants.WINDOW_OFFSET_X * scale
-        offset_y = (A * L * H * 0.5) * zoom
-
-        return LayoutInfo(
-            window_width=window_width,
-            window_height=window_height,
-            stair_height=stair_height,
-            zoom=zoom,
-            offset_x=offset_x,
-            offset_y=offset_y,
-        )
-
-    def _print_info(self, stair_config: StaircaseConfig) -> None:
-        """打印楼梯信息"""
-        print(
-            f"The Penrose-Staircase Nr. {self._current_n} is: "
-            f"{stair_config.a} {stair_config.b} {stair_config.c} {stair_config.d} "
-            f"({stair_config.step_length}) "
-            f"导出缩放: {self._export_scale}x 主题: {self._current_theme.name.value}"
-        )
+    # === 辅助方法 ===
 
     def _create_window(self, layout: LayoutInfo) -> GraphWin:
         """创建窗口并居中显示"""
         win = GraphWin(
-            f"Penrose-Staircase N={self._current_n}",
+            f"Penrose-Staircase N={self._state.n}",
             int(layout.window_width),
             int(layout.window_height),
         )
         
-        # 将窗口移动到屏幕中央偏右位置（避开控制面板）
         try:
-            master = win.master  # 获取 Toplevel 窗口
-            master.update_idletasks()  # 确保窗口尺寸已计算
+            master = win.master
+            master.update_idletasks()
             
-            # 获取屏幕尺寸
             screen_width = master.winfo_screenwidth()
             screen_height = master.winfo_screenheight()
             
-            # 计算居中位置（稍微偏右以避开控制面板）
             win_width = int(layout.window_width)
             win_height = int(layout.window_height)
-            x = (screen_width - win_width) // 2 + 150  # 偏右150像素
-            y = (screen_height - win_height) // 2 - 50  # 稍微上移
+            x = (screen_width - win_width) // 2 + 150
+            y = (screen_height - win_height) // 2 - 50
             
-            # 确保不超出屏幕边界
             x = max(0, min(x, screen_width - win_width))
             y = max(0, min(y, screen_height - win_height))
             
             master.geometry(f"{win_width}x{win_height}+{x}+{y}")
         except Exception:
-            pass  # 如果设置位置失败，使用默认位置
+            pass
         
         return win
 
-    def _create_model(self, stair_config: StaircaseConfig) -> StaircaseModel:
-        """创建楼梯模型"""
-        model = StaircaseModel(stair_config)
-
-        # 生成颜色序列
-        color_gen = ColorSequence(stair_config.total_steps)
-        model.color_sequence = color_gen.generate()
-        model.start_step_index = color_gen.start_index
-
-        if self.config.debug:
-            logger.debug(
-                "总台阶数: %d (A=%d, D=%d, B=%d, C=%d)",
-                stair_config.total_steps,
-                stair_config.a - 1,
-                stair_config.d - 1,
-                stair_config.b - 1,
-                stair_config.c - 1,
-            )
-            logger.debug("起点索引(绘制顺序): %d", model.start_step_index)
-            logger.debug(
-                "颜色序列(绘制顺序): %s",
-                [1 if c else 0 for c in model.color_sequence],
-            )
-
-        return model
-
-    def _render(
-        self,
-        canvas: GraphicsCanvas,
-        transform: GeometryTransform,
-        stair_config: StaircaseConfig,
-        model: StaircaseModel,
-        layout: LayoutInfo,
-        scale: float = 1.0,
-    ) -> None:
-        """渲染楼梯和序列"""
-        theme = self._current_theme
-
-        # 渲染楼梯
-        renderer = StaircaseRenderer(canvas, transform, stair_config, model, theme)
-        renderer.render(model.start_step_index)
-
-        # 渲染标题（根据主题样式）
-        if theme.style.show_title:
-            title = (
-                f"n={self._current_n} ratio: {stair_config.a} {stair_config.b} "
-                f"{stair_config.c} {stair_config.d} ({stair_config.step_length})"
-            )
-            canvas.draw_text(
-                Point(layout.window_width / 2, 5 * scale),
-                title,
-                min(int(LayoutConstants.TITLE_FONT_SIZE_FACTOR * scale), 
-                    LayoutConstants.FONT_SIZE_MAX),
-                theme.colors.text_black,
-                face="courier",
-            )
-
-        # 渲染颜色序列
-        seq_renderer = SequenceRenderer(canvas, stair_config, layout.window_width, theme)
-        seq_renderer.render(
-            model.color_sequence,
-            model.start_step_index,
-            layout.stair_height - LayoutConstants.SEQUENCE_VERTICAL_OFFSET * scale,
-            scale,
-            show_decimal=True,
+    def _print_info(self, config) -> None:
+        """打印楼梯信息"""
+        print(
+            f"The Penrose-Staircase Nr. {self._state.n} is: "
+            f"{config.a} {config.b} {config.c} {config.d} "
+            f"({config.step_length}) "
+            f"导出缩放: {self._state.export_scale}x 主题: {self._state.theme.name.value}"
         )
+
+    def _cleanup(self) -> None:
+        """清理资源"""
+        if self._win and not self._win.isClosed():
+            self._win.close()
