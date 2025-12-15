@@ -169,7 +169,7 @@ class PenroseApp:
         self._current_scale = state.scale
         
         # 调试输出
-        print(f"[DEBUG] 应用: n={state.n}, theme={state.theme} -> {self._current_theme.name.value}")
+        print(f"[DEBUG] 应用: n={state.n}, theme={state.theme}, scale={state.scale} -> {self._current_theme.name.value}")
 
         # 重新渲染
         self._redraw()
