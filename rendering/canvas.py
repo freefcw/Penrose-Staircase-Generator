@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
-from core.colors import RGB
+from core.theme import RGB
 from core.geometry import Point
 
 if TYPE_CHECKING:

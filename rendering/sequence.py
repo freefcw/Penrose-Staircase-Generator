@@ -5,9 +5,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.colors import ColorPalette
+from core.theme import RGB, Theme
 from core.geometry import Point
+from core.layout import LayoutConstants
 from core.staircase import StaircaseConfig
+from rendering.context import SequenceDrawContext
 
 if TYPE_CHECKING:
     from rendering.canvas import Canvas
@@ -23,13 +25,14 @@ class SequenceRenderer:
     - 显示二进制到十进制的转换
     """
 
-    COLS = 6  # 每行显示的台阶数
+    COLS = LayoutConstants.SEQUENCE_COLS  # 每行显示的台阶数
 
     def __init__(
         self,
         canvas: Canvas,
         config: StaircaseConfig,
         window_width: float,
+        theme: Theme,
     ):
         """
         初始化序列渲染器
@@ -38,10 +41,12 @@ class SequenceRenderer:
             canvas: 画布对象
             config: 楼梯配置
             window_width: 窗口宽度
+            theme: 主题对象
         """
         self.canvas = canvas
         self.config = config
         self.window_width = window_width
+        self.theme = theme
 
     def render(
         self,
@@ -141,26 +146,29 @@ class SequenceRenderer:
         show_decimal: bool,
     ) -> None:
         """绘制颜色序列网格"""
-        box_size = 20 * scale
-        margin = 5 * scale
+        box_size = LayoutConstants.SEQUENCE_BOX_SIZE * scale
+        margin = LayoutConstants.SEQUENCE_MARGIN * scale
         start_x = (self.window_width - (self.COLS * (box_size + margin))) / 2
 
         # 计算行高
         row_height = box_size + margin
         if show_decimal:
-            row_height = box_size + margin + 15 * scale
+            row_height = box_size + margin + LayoutConstants.SEQUENCE_DECIMAL_HEIGHT * scale
 
-        # 根据主题决定样式（只有classic使用完整边框样式）
-        is_simple_style = ColorPalette.get_theme() != "classic"
+        # 根据主题样式决定样式
+        is_simple_style = not self.theme.style.show_sequence_border
 
         # 绘制标题
-        hint_pos = Point(self.window_width / 2, start_y - 15 * scale)
-        if is_simple_style:
+        hint_pos = Point(
+            self.window_width / 2, 
+            start_y - LayoutConstants.SEQUENCE_TITLE_OFFSET * scale
+        )
+        if self.theme.style.sequence_hint_simple:
             hint_text = f"台阶序列 (共{len(ordered)}级)"
-            title_color = ColorPalette.TEXT_LIGHT
+            title_color = self.theme.colors.text_light
         else:
             hint_text = f"台阶序列 (共{len(ordered)}级, 从★开始)"
-            title_color = ColorPalette.TEXT_BLACK
+            title_color = self.theme.colors.text_black
         self.canvas.draw_text(
             hint_pos, hint_text, min(int(12 * scale), 30), title_color
         )
@@ -175,14 +183,14 @@ class SequenceRenderer:
             y = start_y + row * row_height
 
             # 绘制方块
-            color = ColorPalette.STEP_RED if is_red else ColorPalette.STEP_GRAY
+            color = self.theme.colors.get_step_color(is_red)
             p1 = Point(x, y)
             p2 = Point(x + box_size, y + box_size)
             if is_simple_style:
                 self.canvas.draw_rectangle(p1, p2, color, color, 0)  # 无边框
             else:
                 self.canvas.draw_rectangle(
-                    p1, p2, color, ColorPalette.TEXT_BLACK, max(1, int(scale))
+                    p1, p2, color, self.theme.colors.text_black, max(1, int(scale))
                 )
 
             # 绘制数字 (0或1)
@@ -191,30 +199,31 @@ class SequenceRenderer:
                 text_pos,
                 "1" if is_red else "0",
                 min(int(12 * scale), 36),
-                ColorPalette.TEXT_WHITE,
+                self.theme.colors.text_white,
             )
 
         # 绘制十进制转换
         if show_decimal:
-            self._draw_decimal_values(ordered, start_y, scale, row_height, start_x, box_size, margin, num_rows)
+            ctx = SequenceDrawContext(
+                start_y=start_y,
+                scale=scale,
+                row_height=row_height,
+                start_x=start_x,
+                box_size=box_size,
+                margin=margin,
+                num_rows=num_rows,
+            )
+            self._draw_decimal_values(ordered, ctx)
 
     def _draw_decimal_values(
         self,
         ordered: list[bool],
-        start_y: float,
-        scale: float,
-        row_height: float,
-        start_x: float,
-        box_size: float,
-        margin: float,
-        num_rows: int,
+        ctx: SequenceDrawContext,
     ) -> None:
         """绘制十进制转换值"""
-        from core.colors import RGB
+        is_simple_style = not self.theme.style.show_decimal_border
 
-        is_simple_style = ColorPalette.get_theme() != "classic"
-
-        for row in range(num_rows):
+        for row in range(ctx.num_rows):
             row_start = row * self.COLS
             row_end = min(row_start + self.COLS, len(ordered))
             row_data = ordered[row_start:row_end]
@@ -236,12 +245,15 @@ class SequenceRenderer:
                     + (1 if last_3[2] else 0)
                 )
 
-                decimal_y = start_y + row * row_height + box_size + 2 * scale
-                decimal_box_height = 12 * scale
+                decimal_y = (
+                    ctx.start_y + row * ctx.row_height + ctx.box_size 
+                    + LayoutConstants.DECIMAL_Y_OFFSET * ctx.scale
+                )
+                decimal_box_height = LayoutConstants.DECIMAL_BOX_HEIGHT_FACTOR * ctx.scale
 
                 # 前3位
-                first_box_x1 = start_x
-                first_box_x2 = start_x + 3 * (box_size + margin) - margin
+                first_box_x1 = ctx.start_x
+                first_box_x2 = ctx.start_x + 3 * (ctx.box_size + ctx.margin) - ctx.margin
                 first_center_x = (first_box_x1 + first_box_x2) / 2
 
                 if not is_simple_style:
@@ -249,18 +261,23 @@ class SequenceRenderer:
                         Point(first_box_x1, decimal_y),
                         Point(first_box_x2, decimal_y + decimal_box_height),
                         RGB(255, 255, 255),
-                        ColorPalette.TEXT_BLACK,
+                        self.theme.colors.text_black,
                     )
+                text_color = (
+                    self.theme.colors.text_light
+                    if is_simple_style
+                    else self.theme.colors.text_black
+                )
                 self.canvas.draw_text(
                     Point(first_center_x, decimal_y + decimal_box_height / 2),
                     str(first_decimal),
-                    min(int(10 * scale), 24),
-                    ColorPalette.TEXT_LIGHT if is_simple_style else ColorPalette.TEXT_BLACK,
+                    min(int(LayoutConstants.DECIMAL_FONT_SIZE_FACTOR * ctx.scale), 24),
+                    text_color,
                 )
 
                 # 后3位
-                last_box_x1 = start_x + 3 * (box_size + margin)
-                last_box_x2 = start_x + 6 * (box_size + margin) - margin
+                last_box_x1 = ctx.start_x + 3 * (ctx.box_size + ctx.margin)
+                last_box_x2 = ctx.start_x + 6 * (ctx.box_size + ctx.margin) - ctx.margin
                 last_center_x = (last_box_x1 + last_box_x2) / 2
 
                 if not is_simple_style:
@@ -268,11 +285,11 @@ class SequenceRenderer:
                         Point(last_box_x1, decimal_y),
                         Point(last_box_x2, decimal_y + decimal_box_height),
                         RGB(255, 255, 255),
-                        ColorPalette.TEXT_BLACK,
+                        self.theme.colors.text_black,
                     )
                 self.canvas.draw_text(
                     Point(last_center_x, decimal_y + decimal_box_height / 2),
                     str(last_decimal),
-                    min(int(10 * scale), 24),
-                    ColorPalette.TEXT_LIGHT if is_simple_style else ColorPalette.TEXT_BLACK,
+                    min(int(LayoutConstants.DECIMAL_FONT_SIZE_FACTOR * ctx.scale), 24),
+                    text_color,
                 )

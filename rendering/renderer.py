@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.colors import ColorPalette
+from core.theme import Theme
 from core.geometry import GeometryTransform, Point
 from core.staircase import StaircaseConfig, StaircaseModel, StepPosition
 
@@ -89,6 +89,7 @@ class StaircaseRenderer:
         transform: GeometryTransform,
         config: StaircaseConfig,
         model: StaircaseModel,
+        theme: Theme,
     ):
         """
         初始化渲染器
@@ -98,11 +99,13 @@ class StaircaseRenderer:
             transform: 几何变换器
             config: 楼梯配置
             model: 楼梯模型
+            theme: 主题对象
         """
         self.canvas = canvas
         self.transform = transform
         self.config = config
         self.model = model
+        self.theme = theme
         self.builder = PolygonBuilder(transform)
 
         # 简化访问
@@ -198,9 +201,9 @@ class StaircaseRenderer:
         # 确定颜色
         if not skip_record and current_index < len(self.model.color_sequence):
             is_red = self.model.color_sequence[current_index]
-            color = ColorPalette.get_step_color(is_red)
+            color = self.theme.colors.get_step_color(is_red)
         else:
-            color = ColorPalette.STEP_GRAY
+            color = self.theme.colors.step_gray
 
         # 绘制多边形
         self.canvas.draw_polygon(points, color)
@@ -226,8 +229,8 @@ class StaircaseRenderer:
         sp4 = self.transform.to_screen(step.p4[0], -step.p4[1])
 
         line_width = max(1, int(self.transform.scale / 8))
-        self.canvas.draw_line(sp1, sp3, ColorPalette.MARKER_WHITE, line_width)
-        self.canvas.draw_line(sp2, sp4, ColorPalette.MARKER_WHITE, line_width)
+        self.canvas.draw_line(sp1, sp3, self.theme.colors.marker_white, line_width)
+        self.canvas.draw_line(sp2, sp4, self.theme.colors.marker_white, line_width)
 
     def _render_zone_a(
         self, x: float, y: float, current_index: int, start_index: int
@@ -322,7 +325,7 @@ class StaircaseRenderer:
         self.builder.line_rel(U * WH * 0.5 - B * U * 0.5, -H * WH + H * B)
         self.builder.line_rel(-L * U * (B - 2) + U * 0.5, -H)
 
-        self.canvas.draw_polygon(self.builder.build(), ColorPalette.WALL_FRONT)
+        self.canvas.draw_polygon(self.builder.build(), self.theme.colors.wall_front)
 
     def _render_mid_wall(self, x: float, y: float) -> None:
         """渲染中墙"""
@@ -340,7 +343,7 @@ class StaircaseRenderer:
         self.builder.line_rel(U * WH * 0.5, -H * WH)
         self.builder.line_rel(-U * 0.5 * L * (C - 1), -H * L * (C - 1))
 
-        self.canvas.draw_polygon(self.builder.build(), ColorPalette.WALL_SIDE)
+        self.canvas.draw_polygon(self.builder.build(), self.theme.colors.wall_side)
 
     def _render_front_wall(self, x: float, y: float) -> None:
         """渲染前墙"""
@@ -357,7 +360,7 @@ class StaircaseRenderer:
         self.builder.line_rel(U * WH * 0.5, -H * WH)
         self.builder.line_rel(-U * D * L, 0)
 
-        self.canvas.draw_polygon(self.builder.build(), ColorPalette.WALL_FRONT)
+        self.canvas.draw_polygon(self.builder.build(), self.theme.colors.wall_front)
 
     def _render_right_wall(self, x: float, y: float) -> None:
         """渲染右墙"""
@@ -384,7 +387,7 @@ class StaircaseRenderer:
         self.builder.line_rel(U * WH * 0.5, -H * WH)
         self.builder.line_rel(-U * 0.5 * L * C, -H * L * C)
 
-        self.canvas.draw_polygon(self.builder.build(), ColorPalette.WALL_SIDE)
+        self.canvas.draw_polygon(self.builder.build(), self.theme.colors.wall_side)
 
     def _render_stair_rects_c(self, x: float, y: float) -> None:
         """渲染C区装饰矩形"""
@@ -405,7 +408,7 @@ class StaircaseRenderer:
         self.builder.line_rel(U / 2, -H)
         self.builder.line_rel(-U * L * 0.5, -H * L)
 
-        self.canvas.draw_polygon(self.builder.build(), ColorPalette.WALL_SIDE)
+        self.canvas.draw_polygon(self.builder.build(), self.theme.colors.wall_side)
 
     def _render_stair_rects_d(self, x: float, y: float) -> None:
         """渲染D区装饰矩形"""
@@ -430,7 +433,7 @@ class StaircaseRenderer:
         self.builder.line_rel(U / 2, -H)
         self.builder.line_rel(-U * L, 0)
 
-        self.canvas.draw_polygon(self.builder.build(), ColorPalette.WALL_FRONT)
+        self.canvas.draw_polygon(self.builder.build(), self.theme.colors.wall_front)
 
     def _render_zone_labels(self) -> None:
         """渲染区域标签 A、B、C、D，放在每个区域中点外侧"""
@@ -477,8 +480,14 @@ class StaircaseRenderer:
             (c_label_pos, "C"),
             (d_label_pos, "D"),
         ]
+        # 根据主题样式选择标签颜色
+        label_color = (
+            self.theme.colors.text_light
+            if self.theme.style.use_light_labels
+            else self.theme.colors.text_black
+        )
 
         for pos, label in labels:
             self.canvas.draw_text(
-                pos, label, font_size, ColorPalette.TEXT_LIGHT, style="bold"
+                pos, label, font_size, label_color, style="bold"
             )
