@@ -71,12 +71,16 @@ class PolygonBuilder:
 class StaircaseRenderer:
     """
     Penrose楼梯渲染器
-
-    职责：
+    
+    采用组合模式，将渲染职责委托给专注的子渲染器：
+    - WallRenderer: 墙体渲染
+    - LabelRenderer: 标签渲染
+    - DecoratorRenderer: 装饰矩形渲染
+    
+    本类只负责：
     - 渲染楼梯的四个区域（A、B、C、D）
-    - 渲染墙体结构
-    - 渲染区域标签
     - 渲染起点标记
+    - 协调渲染顺序（画家算法）
     """
 
     # 几何常量
@@ -93,7 +97,7 @@ class StaircaseRenderer:
     ):
         """
         初始化渲染器
-
+        
         Args:
             canvas: 画布对象
             transform: 几何变换器
@@ -101,6 +105,10 @@ class StaircaseRenderer:
             model: 楼梯模型
             theme: 主题对象
         """
+        from rendering.wall_renderer import WallRenderer
+        from rendering.label_renderer import LabelRenderer
+        from rendering.decorator_renderer import DecoratorRenderer
+        
         self.canvas = canvas
         self.transform = transform
         self.config = config
@@ -115,6 +123,11 @@ class StaircaseRenderer:
         self.D = config.d
         self.L = config.step_length
         self.WH = config.wall_height
+        
+        # 子渲染器
+        self._wall_renderer = WallRenderer(canvas, transform, config, theme)
+        self._label_renderer = LabelRenderer(canvas, transform, config, theme)
+        self._decorator_renderer = DecoratorRenderer(canvas, transform, config, theme)
 
     def render(self, start_index: int) -> None:
         """
@@ -122,16 +135,13 @@ class StaircaseRenderer:
 
         按照画家算法顺序渲染：
         1. A区台阶
-        2. 内墙
-        3. 中墙
-        4. D区台阶
-        5. B区台阶
-        6. C区台阶
-        7. D区装饰矩形
-        8. C区装饰矩形
-        9. 前墙
-        10. 右墙
-        11. 区域标签
+        2. 内墙、中墙
+        3. D区台阶
+        4. B区台阶
+        5. C区台阶
+        6. 装饰矩形
+        7. 前墙、右墙
+        8. 区域标签
         """
         self.model.clear_positions()
         current_index = 0
@@ -139,9 +149,9 @@ class StaircaseRenderer:
         # 渲染A区台阶
         current_index = self._render_zone_a(0, 0, current_index, start_index)
 
-        # 渲染墙体
-        self._render_inner_wall(0, 0)
-        self._render_mid_wall(0, 0)
+        # 渲染墙体（委托给 WallRenderer）
+        self._wall_renderer.render_inner_wall(0, 0)
+        self._wall_renderer.render_mid_wall(0, 0)
 
         # 渲染D区台阶
         current_index = self._render_zone_d(0, 0, current_index, start_index)
@@ -152,16 +162,15 @@ class StaircaseRenderer:
         # 渲染C区台阶
         current_index = self._render_zone_c(0, 0, current_index, start_index)
 
-        # 渲染装饰矩形
-        self._render_stair_rects_d(0, 0)
-        self._render_stair_rects_c(0, 0)
+        # 渲染装饰矩形（委托给 DecoratorRenderer）
+        self._decorator_renderer.render_all()
 
-        # 渲染外墙
-        self._render_front_wall(0, 0)
-        self._render_right_wall(0, 0)
+        # 渲染外墙（委托给 WallRenderer）
+        self._wall_renderer.render_front_wall(0, 0)
+        self._wall_renderer.render_right_wall(0, 0)
 
-        # 渲染区域标签
-        self._render_zone_labels()
+        # 渲染区域标签（委托给 LabelRenderer）
+        self._label_renderer.render_zone_labels()
 
     def _render_step(
         self,
