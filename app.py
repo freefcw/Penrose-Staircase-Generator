@@ -286,6 +286,9 @@ class PenroseApp:
         # 创建/更新高亮管理器
         transform = GeometryTransform(layout.zoom, layout.offset_x, layout.offset_y)
         self._highlight_manager = HighlightManager(self._win, transform)
+        
+        # 恢复高亮状态
+        self._restore_highlight()
 
     def _refresh_display(self) -> None:
         """仅刷新显示，不重新计算数据"""
@@ -314,6 +317,9 @@ class PenroseApp:
         # 创建/更新高亮管理器
         transform = GeometryTransform(layout.zoom, layout.offset_x, layout.offset_y)
         self._highlight_manager = HighlightManager(self._win, transform)
+        
+        # 恢复高亮状态
+        self._restore_highlight()
 
     # === 步进面板 ===
 
@@ -352,6 +358,15 @@ class PenroseApp:
             step_pos = model.get_step_position(draw_index)
             if step_pos:
                 self._highlight_manager.highlight(step_pos)
+
+    def _restore_highlight(self) -> None:
+        """恢复高亮状态
+        
+        在窗口刷新后调用，根据步进面板的当前索引重新应用高亮
+        """
+        if self._step_panel and not self._step_panel.is_closed():
+            current_index = self._step_panel.current_index
+            self._handle_step_change(current_index)
 
     # === 辅助方法 ===
 
