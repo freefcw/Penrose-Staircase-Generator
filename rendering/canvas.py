@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, Protocol, runtime_checkable
 
 from typing_extensions import override
 
@@ -15,6 +15,18 @@ from core.geometry import Point
 
 if TYPE_CHECKING:
     from graphics import GraphWin
+
+
+@runtime_checkable
+class DrawHandle(Protocol):
+    """
+    可撤销的绘图对象句柄
+    
+    用于跟踪已绘制的图形对象，支持后续撤销操作
+    """
+    def undraw(self) -> None:
+        """从画布上移除该图形对象"""
+        ...
 
 
 class Canvas(ABC):
@@ -54,6 +66,13 @@ class Canvas(ABC):
         self, p1: Point, p2: Point, fill: RGB, outline: RGB, width: int = 1
     ) -> None:
         """绘制矩形"""
+        ...
+
+    @abstractmethod
+    def draw_polygon_outline(
+        self, points: list[Point], color: RGB, width: int = 2
+    ) -> DrawHandle:
+        """绘制多边形边框（用于高亮）"""
         ...
 
 
@@ -140,5 +159,18 @@ class GraphicsCanvas(Canvas):
         rect.setOutline(self._to_color(outline))
         rect.setWidth(width)
         _ = rect.draw(self.win)
+
+    @override
+    def draw_polygon_outline(
+        self, points: list[Point], color: RGB, width: int = 2
+    ) -> DrawHandle:
+        """绘制多边形边框（用于高亮）"""
+        gpoints = [self._to_gpoint(p) for p in points]
+        poly = self._Polygon(gpoints)
+        poly.setFill("")  # 透明填充
+        poly.setOutline(self._to_color(color))
+        poly.setWidth(width)
+        _ = poly.draw(self.win)
+        return poly
 
 

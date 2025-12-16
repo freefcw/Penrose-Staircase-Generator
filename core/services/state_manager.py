@@ -10,8 +10,14 @@ from typing import final
 
 from core.calculator import PenroseCalculator
 from core.colors import ColorSequence
+from core.index_converter import IndexConverter
+from core.platform_config import PlatformConfigProvider
 from core.staircase import StaircaseConfig, StaircaseModel
 from core.theme import Theme
+
+
+# 基础预览缩放
+_BASE_PREVIEW_SCALE = 1.6
 
 
 @dataclass
@@ -51,7 +57,9 @@ class StateManager:
         self._n = n
         self._theme = theme
         self._export_scale = export_scale
-        self._preview_scale = 1.6
+        # 应用平台相关的预览缩放因子
+        scale_factor = PlatformConfigProvider.get_preview_scale_factor()
+        self._preview_scale = _BASE_PREVIEW_SCALE * scale_factor
         
         # 缓存
         self._cached_config: StaircaseConfig | None = None
@@ -182,7 +190,7 @@ class StateManager:
         model.walking_order_colors = self._convert_to_walking_order(
             draw_order_colors, config
         )
-        model.walking_order_start = self._convert_start_index(
+        model.walking_order_start = IndexConverter.draw_to_walking(
             draw_order_start, config
         )
         
@@ -215,28 +223,6 @@ class StateManager:
         walking_order.extend(colors[0:a_count])
         
         return walking_order
-    
-    def _convert_start_index(self, draw_index: int, config: StaircaseConfig) -> int:
-        """将绘制顺序索引转换为行走顺序索引"""
-        a_count = config.a - 1
-        d_count = config.d - 1
-        b_count = config.b - 1
-        c_count = config.c - 1
-        
-        if draw_index < a_count:
-            # A区 → 在行走顺序末尾
-            return d_count + c_count + b_count + draw_index
-        elif draw_index < a_count + d_count:
-            # D区 → 在行走顺序开头
-            return draw_index - a_count
-        elif draw_index < a_count + d_count + b_count:
-            # B区 → 在C区后面，且被反转
-            position_in_b = draw_index - a_count - d_count
-            return d_count + c_count + (b_count - 1 - position_in_b)
-        else:
-            # C区 → 在D区后面，且被反转
-            position_in_c = draw_index - a_count - d_count - b_count
-            return d_count + (c_count - 1 - position_in_c)
     
     # === 状态快照 ===
     

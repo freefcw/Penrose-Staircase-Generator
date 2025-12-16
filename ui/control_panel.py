@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
+from core.platform_config import get_platform_config
+
 
 class PanelAction(str, Enum):
     """控制面板动作枚举"""
@@ -45,10 +47,20 @@ class ControlPanel:
     # 可用主题列表
     THEMES = ["minimal", "classic", "professional", "artistic"]
     
-    # 窗口配置
+    # 窗口配置（默认值，实际使用平台配置）
     WINDOW_WIDTH = 300
-    WINDOW_HEIGHT = 420  # 增加高度以适应配置管理按钮
+    WINDOW_HEIGHT = 420
     PADDING = 10
+
+    @staticmethod
+    def get_platform_size():
+        """获取平台相关的窗口大小"""
+        config = get_platform_config()
+        return {
+            "width": config.control_panel_width,
+            "height": config.control_panel_height,
+            "font_scale": config.font_scale
+        }
     
     def __init__(
         self, 
@@ -94,12 +106,15 @@ class ControlPanel:
         """显示控制面板"""
         self._root = tk.Tk()
         self._root.title("Penrose 控制面板")
-        self._root.geometry(f"{self.WINDOW_WIDTH}x{self.WINDOW_HEIGHT}")
+
+        # 使用平台相关的尺寸
+        platform_size = self.get_platform_size()
+        self._root.geometry(f"{platform_size['width']}x{platform_size['height']}")
         self._root.resizable(False, False)
-        
+
         # 设置关闭事件
         self._root.protocol("WM_DELETE_WINDOW", self._handle_close)
-        
+
         self._build_ui()
     
     def _build_ui(self) -> None:

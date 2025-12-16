@@ -6,6 +6,8 @@ from tkinter import ttk
 from dataclasses import dataclass
 from typing import Callable
 
+from core.platform_config import get_platform_config
+
 
 @dataclass
 class StepInfo:
@@ -33,6 +35,16 @@ class StepControlPanel:
     WINDOW_WIDTH = 320
     WINDOW_HEIGHT = 280
     PADDING = 15
+
+    @staticmethod
+    def get_platform_size():
+        """获取平台相关的窗口大小"""
+        config = get_platform_config()
+        return {
+            "width": config.step_panel_width,
+            "height": config.step_panel_height,
+            "font_scale": config.font_scale
+        }
     
     def __init__(
         self,
@@ -73,9 +85,12 @@ class StepControlPanel:
             self._root = tk.Toplevel(parent)
         else:
             self._root = tk.Toplevel()
-        
+
         self._root.title("步进控制")
-        self._root.geometry(f"{self.WINDOW_WIDTH}x{self.WINDOW_HEIGHT}+50+450")
+
+        # 使用平台相关的尺寸
+        platform_size = self.get_platform_size()
+        self._root.geometry(f"{platform_size['width']}x{platform_size['height']}+50+450")
         self._root.resizable(False, False)
         self._root.protocol("WM_DELETE_WINDOW", self._handle_close)
         

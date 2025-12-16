@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from core.index_converter import IndexConverter
 from core.theme import RGB, Theme
 from core.geometry import Point
 from core.layout import LayoutConstants
@@ -71,7 +72,7 @@ class SequenceRenderer:
 
         # 转换为行走顺序
         walking_order = self._reorder_to_walking(colors)
-        walking_start = self._convert_start_index(start_index)
+        walking_start = IndexConverter.draw_to_walking(start_index, self.config)
 
         # 从起点开始循环排列
         if 0 <= walking_start < len(walking_order):
@@ -107,36 +108,6 @@ class SequenceRenderer:
         walking_order.extend(colors[0:a_count])
 
         return walking_order
-
-    def _convert_start_index(self, draw_index: int) -> int:
-        """
-        将绘制顺序索引转换为行走顺序索引
-
-        Args:
-            draw_index: 绘制顺序中的索引
-
-        Returns:
-            行走顺序中的索引
-        """
-        a_count = self.config.a - 1
-        d_count = self.config.d - 1
-        b_count = self.config.b - 1
-        c_count = self.config.c - 1
-
-        if draw_index < a_count:
-            # A区 → 在行走顺序末尾
-            return d_count + c_count + b_count + draw_index
-        elif draw_index < a_count + d_count:
-            # D区 → 在行走顺序开头
-            return draw_index - a_count
-        elif draw_index < a_count + d_count + b_count:
-            # B区 → 在C区后面，且被反转
-            position_in_b = draw_index - a_count - d_count
-            return d_count + c_count + (b_count - 1 - position_in_b)
-        else:
-            # C区 → 在D区后面，且被反转
-            position_in_c = draw_index - a_count - d_count - b_count
-            return d_count + (c_count - 1 - position_in_c)
 
     def _draw_sequence(
         self,

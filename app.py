@@ -13,12 +13,16 @@ import logging
 from graphics import GraphWin
 
 from core.config import AppConfig
+from core.geometry import GeometryTransform
+from core.index_converter import IndexConverter
+from core.platform_config import get_platform_config
 from core.services.state_manager import StateManager
 from core.services.rendering_service import RenderingService, LayoutInfo
 from core.services.event_processor import EventProcessor
 from core.theme import Theme
 from export.exporter import ImageExporter
 from ui.control_panel import ControlPanel, PanelState
+from ui.highlight_manager import HighlightManager
 from ui.step_panel import StepControlPanel
 
 # 配置日志
@@ -61,6 +65,9 @@ class PenroseApp:
         self._win: GraphWin | None = None
         self._control_panel: ControlPanel | None = None
         self._step_panel: StepControlPanel | None = None
+        
+        # 高亮管理器
+        self._highlight_manager: HighlightManager | None = None
 
     def run(self) -> int:
         """
@@ -105,6 +112,11 @@ class PenroseApp:
             self._win, config, model, layout,
             self._state.theme, self._state.n, self._state.preview_scale
         )
+        
+        # 创建高亮管理器
+        transform = GeometryTransform(layout.zoom, layout.offset_x, layout.offset_y)
+        self._highlight_manager = HighlightManager(self._win, transform)
+        
         return True
 
     def _create_control_panel(self) -> None:
@@ -161,6 +173,10 @@ class PenroseApp:
 
         # 重新计算并渲染
         self._redraw()
+        
+        # 重新生成后，高亮会被清除
+        if self._highlight_manager:
+            self._highlight_manager.clear()
         
         # 创建/更新步进控制面板
         self._create_step_panel()
@@ -255,7 +271,7 @@ class PenroseApp:
 
         config, model = data
         layout = RenderingService.calculate_layout(config, self._state.preview_scale)
-
+        
         # 关闭旧窗口，创建新窗口
         if self._win and not self._win.isClosed():
             self._win.close()
@@ -266,6 +282,10 @@ class PenroseApp:
             self._state.theme, self._state.n, self._state.preview_scale
         )
         self._print_info(config)
+        
+        # 创建/更新高亮管理器
+        transform = GeometryTransform(layout.zoom, layout.offset_x, layout.offset_y)
+        self._highlight_manager = HighlightManager(self._win, transform)
 
     def _refresh_display(self) -> None:
         """仅刷新显示，不重新计算数据"""
@@ -290,6 +310,10 @@ class PenroseApp:
             self._state.theme, self._state.n, self._state.preview_scale
         )
         self._print_info(config)
+        
+        # 创建/更新高亮管理器
+        transform = GeometryTransform(layout.zoom, layout.offset_x, layout.offset_y)
+        self._highlight_manager = HighlightManager(self._win, transform)
 
     # === 步进面板 ===
 
@@ -312,41 +336,74 @@ class PenroseApp:
         self._step_panel.show(parent)
 
     def _handle_step_change(self, new_index: int) -> None:
-        """处理步进位置变化"""
+        """处理步进位置变化，并高亮当前台阶"""
         model = self._state.cached_model
-        if model:
-            color = 1 if model.color_sequence[new_index] else 0
-            print(f"[步进] 位置: {new_index + 1}/{model.config.total_steps}, 颜色: {color}")
+        config = self._state.cached_config
+        if not model or not config:
+            return
+        
+        color = 1 if model.walking_order_colors[new_index] else 0
+        print(f"[步进] 位置: {new_index + 1}/{model.config.total_steps}, 颜色: {color}")
+        
+        # 高亮当前台阶
+        if self._highlight_manager:
+            # 转换索引（行走顺序 -> 绘制顺序）
+            draw_index = IndexConverter.walking_to_draw(new_index, config)
+            step_pos = model.get_step_position(draw_index)
+            if step_pos:
+                self._highlight_manager.highlight(step_pos)
 
     # === 辅助方法 ===
 
     def _create_window(self, layout: LayoutInfo) -> GraphWin:
-        """创建窗口并居中显示"""
+        """创建窗口并居中显示，支持平台适配
+        
+        注意：窗口尺寸直接使用 layout 中的尺寸（已在计算时应用了平台缩放），
+        不再单独缩放窗口，避免窗口尺寸和渲染内容不匹配。
+        """
+        # 获取平台配置
+        config = get_platform_config()
+
+        # 直接使用布局尺寸（已包含平台缩放）
+        win_width = int(layout.window_width)
+        win_height = int(layout.window_height)
+
         win = GraphWin(
             f"Penrose-Staircase N={self._state.n}",
-            int(layout.window_width),
-            int(layout.window_height),
+            win_width,
+            win_height,
         )
-        
+
         try:
             master = win.master
             master.update_idletasks()
-            
+
+            # 让窗口可以调整大小
+            master.resizable(True, True)
+
+            # 设置最小窗口大小
+            master.minsize(config.min_window_width, config.min_window_height)
+
             screen_width = master.winfo_screenwidth()
             screen_height = master.winfo_screenheight()
-            
-            win_width = int(layout.window_width)
-            win_height = int(layout.window_height)
-            x = (screen_width - win_width) // 2 + 150
-            y = (screen_height - win_height) // 2 - 50
-            
+
+            # 使用平台相关的偏移量
+            x = (screen_width - win_width) // 2 + config.offset_x
+            y = (screen_height - win_height) // 2 + config.offset_y
+
             x = max(0, min(x, screen_width - win_width))
             y = max(0, min(y, screen_height - win_height))
-            
+
             master.geometry(f"{win_width}x{win_height}+{x}+{y}")
-        except Exception:
+
+            # 打印平台信息用于调试
+            print(f"[平台检测] 预览缩放因子: {config.preview_scale_factor}, "
+                  f"字体缩放: {config.font_scale}")
+
+        except Exception as e:
+            print(f"[窗口创建] 设置窗口参数时出错: {e}")
             pass
-        
+
         return win
 
     def _print_info(self, config) -> None:
