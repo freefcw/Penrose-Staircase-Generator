@@ -22,17 +22,29 @@ from kivy.graphics import Color, Rectangle
 from kivy.core.text import LabelBase
 
 from rendering.kivy_canvas import KivyCanvas
+from core.platform_config import get_platform_config
 
 
-# 注册中文字体 (macOS 系统字体)
+# 注册中文字体 (跨平台支持)
 def _register_chinese_font():
     """注册支持中文的字体"""
-    # macOS 上的中文字体路径
+    # 跨平台中文字体路径
     font_paths = [
-        '/System/Library/Fonts/PingFang.ttc',  # PingFang (macOS 10.11+)
-        '/System/Library/Fonts/STHeiti Light.ttc',  # 黑体
-        '/System/Library/Fonts/Hiragino Sans GB.ttc',  # 冬青黑体
-        '/Library/Fonts/Arial Unicode.ttf',  # Arial Unicode
+        # Linux 中文字体 - 按优先级排序
+        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Regular.ttf',  # HarmonyOS Sans SC
+        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Bold.ttf',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',  # Noto Sans CJK
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
+        '/usr/share/fonts/sarasa/sarasa/SarasaGothicSC-Regular.ttf',  # 更纱黑体
+        '/usr/share/fonts/truetype/arphic/uming.ttc',  # AR PL UMing
+        '/usr/share/fonts/truetype/arphic/ukai.ttc',
+        # 用户本地字体
+        os.path.expanduser('~/.local/share/fonts/NotoSansCJKsc-Regular.otf'),
+        # macOS 中文字体
+        '/System/Library/Fonts/PingFang.ttc',
+        '/System/Library/Fonts/STHeiti Light.ttc',
+        '/System/Library/Fonts/Hiragino Sans GB.ttc',
+        '/Library/Fonts/Arial Unicode.ttf',
     ]
     
     for font_path in font_paths:
@@ -46,8 +58,31 @@ def _register_chinese_font():
     # 如果没有找到中文字体，使用默认字体
     return 'Roboto'
 
-# 注册字体
+def _get_chinese_font_path():
+    """获取中文字体的完整路径（Kivy SDL2需要完整路径）"""
+    font_paths = [
+        # Linux 中文字体 - 按优先级排序
+        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Regular.ttf',
+        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Bold.ttf',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/sarasa/sarasa/SarasaGothicSC-Regular.ttf',
+        '/usr/share/fonts/truetype/arphic/uming.ttc',
+        os.path.expanduser('~/.local/share/fonts/NotoSansCJKsc-Regular.otf'),
+        # macOS 中文字体
+        '/System/Library/Fonts/PingFang.ttc',
+        '/System/Library/Fonts/STHeiti Light.ttc',
+    ]
+    
+    for font_path in font_paths:
+        if os.path.exists(font_path):
+            return font_path
+    
+    return 'Roboto'  # 回退到默认字体
+
+# 注册字体（保留兼容性）
 CHINESE_FONT = _register_chinese_font()
+# 获取字体路径（用于SDL2）
+CHINESE_FONT_PATH = _get_chinese_font_path()
 
 
 class StaircaseWidget(Widget):
@@ -112,17 +147,31 @@ class ControlPanelWidget(BoxLayout):
         on_export: Callable[[str], None] | None = None,
         **kwargs
     ):
+        # 获取平台配置
+        platform_config = get_platform_config()
+        panel_width = platform_config.control_panel_width
+        font_scale = platform_config.font_scale
+        
+        # 根据font_scale调整尺寸
+        base_padding = int(15 * font_scale)
+        base_spacing = int(15 * font_scale)
+        base_height = int(40 * font_scale)
+        base_font_size = int(18 * font_scale)
+        
         super().__init__(
             orientation='vertical',
             size_hint=(None, 1),
-            width=560,
-            padding=25,
-            spacing=25,
+            width=panel_width,
+            padding=base_padding,
+            spacing=base_spacing,
             **kwargs
         )
         
         self._on_generate = on_generate
         self._on_export = on_export
+        self._font_scale = font_scale
+        self._base_height = base_height
+        self._base_font_size = base_font_size
         
         # 背景颜色
         with self.canvas.before:
@@ -134,65 +183,86 @@ class ControlPanelWidget(BoxLayout):
         self.add_widget(Label(
             text='Penrose Control',
             size_hint_y=None,
-            height=40,
-            font_size=18,
-            font_name=CHINESE_FONT,
+            height=base_height,
+            font_size=base_font_size,
+            font_name=CHINESE_FONT_PATH,
             bold=True,
             color=(1, 1, 1, 1)
         ))
         
         # === N 输入区域 ===
-        n_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=5)
+        n_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=base_height, spacing=int(5 * font_scale))
         n_box.add_widget(Label(
             text='N =', 
             size_hint_x=0.3, 
-            font_name=CHINESE_FONT,
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(14 * font_scale),
             color=(1, 1, 1, 1)
         ))
         self._n_input = TextInput(
             text=str(initial_n),
             multiline=False,
             input_filter='int',
-            size_hint_x=0.7
+            size_hint_x=0.7,
+            font_size=int(14 * font_scale)
         )
         n_box.add_widget(self._n_input)
         self.add_widget(n_box)
         
         # === 主题选择 ===
-        theme_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=5)
+        theme_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=base_height, spacing=int(5 * font_scale))
         theme_box.add_widget(Label(
             text='Theme', 
             size_hint_x=0.3, 
-            font_name=CHINESE_FONT,
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(14 * font_scale),
             color=(1, 1, 1, 1)
         ))
+        
+        # 自定义Spinner下拉选项样式
+        from kivy.uix.spinner import SpinnerOption
+        
+        # 保存 font_scale 用于闭包
+        _fs = font_scale
+        
+        class LargeSpinnerOption(SpinnerOption):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.font_size = int(18 * _fs)
+                self.height = int(50 * _fs)
+        
         self._theme_spinner = Spinner(
             text=initial_theme,
             values=self.THEMES,
-            size_hint_x=0.7
+            size_hint_x=0.7,
+            font_size=int(18 * font_scale),
+            option_cls=LargeSpinnerOption,
         )
+        self._theme_spinner.dropdown_cls.max_height = int(300 * font_scale)
         theme_box.add_widget(self._theme_spinner)
         self.add_widget(theme_box)
         
         # === 缩放滑块 ===
-        scale_box = BoxLayout(orientation='vertical', size_hint_y=None, height=60)
-        scale_label_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=30)
+        scale_box = BoxLayout(orientation='vertical', size_hint_y=None, height=int(60 * font_scale))
+        scale_label_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(30 * font_scale))
         scale_label_box.add_widget(Label(
             text='Scale', 
             size_hint_x=0.5, 
-            font_name=CHINESE_FONT,
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(14 * font_scale),
             color=(1, 1, 1, 1)
         ))
         self._scale_label = Label(
             text=f'{initial_scale:.1f}x', 
             size_hint_x=0.5, 
-            font_name=CHINESE_FONT,
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(14 * font_scale),
             color=(1, 1, 1, 1)
         )
         scale_label_box.add_widget(self._scale_label)
         scale_box.add_widget(scale_label_box)
         
-        self._scale_slider = Slider(min=0.5, max=3.0, value=initial_scale, size_hint_y=None, height=30)
+        self._scale_slider = Slider(min=0.5, max=3.0, value=initial_scale, size_hint_y=None, height=int(30 * font_scale))
         self._scale_slider.bind(value=self._on_scale_change)
         scale_box.add_widget(self._scale_slider)
         self.add_widget(scale_box)
@@ -201,8 +271,9 @@ class ControlPanelWidget(BoxLayout):
         self._generate_btn = Button(
             text='Generate',
             size_hint_y=None,
-            height=50,
-            font_name=CHINESE_FONT,
+            height=int(50 * font_scale),
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(16 * font_scale),
             background_color=(0.2, 0.6, 0.3, 1)
         )
         self._generate_btn.bind(on_press=self._handle_generate)
@@ -212,8 +283,9 @@ class ControlPanelWidget(BoxLayout):
         self._export_btn = Button(
             text='Export PNG',
             size_hint_y=None,
-            height=50,
-            font_name=CHINESE_FONT,
+            height=int(50 * font_scale),
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(16 * font_scale),
             background_color=(0.3, 0.5, 0.7, 1)
         )
         self._export_btn.bind(on_press=self._handle_export)
@@ -223,73 +295,73 @@ class ControlPanelWidget(BoxLayout):
         self._status_label = Label(
             text='Ready',
             size_hint_y=None,
-            height=30,
-            font_name=CHINESE_FONT,
+            height=int(30 * font_scale),
+            font_name=CHINESE_FONT_PATH,
             color=(0.6, 0.6, 0.6, 1),
-            font_size=12
+            font_size=int(12 * font_scale)
         )
         self.add_widget(self._status_label)
         
         # === 分隔线 ===
-        self.add_widget(Widget(size_hint_y=None, height=20))
+        self.add_widget(Widget(size_hint_y=None, height=int(20 * font_scale)))
         
         # === 步进控制面板 ===
-        step_frame = BoxLayout(orientation='vertical', size_hint_y=None, height=200, spacing=10)
+        step_frame = BoxLayout(orientation='vertical', size_hint_y=None, height=int(200 * font_scale), spacing=int(10 * font_scale))
         
         # 步进标题
         step_frame.add_widget(Label(
             text='Step Navigation',
-            size_hint_y=None, height=30,
-            font_name=CHINESE_FONT, font_size=16, bold=True,
+            size_hint_y=None, height=int(30 * font_scale),
+            font_name=CHINESE_FONT_PATH, font_size=int(16 * font_scale), bold=True,
             color=(1, 1, 1, 1)
         ))
         
         # 状态显示区
-        status_box = BoxLayout(orientation='vertical', size_hint_y=None, height=80, spacing=5)
+        status_box = BoxLayout(orientation='vertical', size_hint_y=None, height=int(80 * font_scale), spacing=int(5 * font_scale))
         
         # 位置行
-        pos_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=25)
-        pos_row.add_widget(Label(text='Position:', font_name=CHINESE_FONT, color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
-        self._step_position_label = Label(text='1 / 24', font_name=CHINESE_FONT, color=(1, 1, 1, 1), font_size=14, bold=True, size_hint_x=0.6)
+        pos_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(25 * font_scale))
+        pos_row.add_widget(Label(text='Position:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
+        self._step_position_label = Label(text='1 / 24', font_name=CHINESE_FONT_PATH, color=(1, 1, 1, 1), font_size=int(14 * font_scale), bold=True, size_hint_x=0.6)
         pos_row.add_widget(self._step_position_label)
         status_box.add_widget(pos_row)
         
         # 颜色行
-        color_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=25)
-        color_row.add_widget(Label(text='Color:', font_name=CHINESE_FONT, color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
-        self._step_color_label = Label(text='0', font_name=CHINESE_FONT, color=(0.3, 0.3, 1, 1), font_size=16, bold=True, size_hint_x=0.6)
+        color_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(25 * font_scale))
+        color_row.add_widget(Label(text='Color:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
+        self._step_color_label = Label(text='0', font_name=CHINESE_FONT_PATH, color=(0.3, 0.3, 1, 1), font_size=int(16 * font_scale), bold=True, size_hint_x=0.6)
         color_row.add_widget(self._step_color_label)
         status_box.add_widget(color_row)
         
         # 从起点步数行
-        steps_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=25)
-        steps_row.add_widget(Label(text='From Start:', font_name=CHINESE_FONT, color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
-        self._steps_from_start_label = Label(text='0', font_name=CHINESE_FONT, color=(1, 1, 1, 1), font_size=14, bold=True, size_hint_x=0.6)
+        steps_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(25 * font_scale))
+        steps_row.add_widget(Label(text='From Start:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
+        self._steps_from_start_label = Label(text='0', font_name=CHINESE_FONT_PATH, color=(1, 1, 1, 1), font_size=int(14 * font_scale), bold=True, size_hint_x=0.6)
         steps_row.add_widget(self._steps_from_start_label)
         status_box.add_widget(steps_row)
         
         step_frame.add_widget(status_box)
         
         # 步数输入行
-        input_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=35, spacing=10)
-        input_row.add_widget(Label(text='Steps:', font_name=CHINESE_FONT, color=(0.7, 0.7, 0.7, 1), size_hint_x=0.3))
-        self._step_input = TextInput(text='1', size_hint_x=0.3, multiline=False, input_filter='int')
+        input_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(35 * font_scale), spacing=int(10 * font_scale))
+        input_row.add_widget(Label(text='Steps:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.3))
+        self._step_input = TextInput(text='1', size_hint_x=0.3, multiline=False, input_filter='int', font_size=int(14 * font_scale))
         input_row.add_widget(self._step_input)
         input_row.add_widget(Widget(size_hint_x=0.4))
         step_frame.add_widget(input_row)
         
         # 控制按钮行
-        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=45, spacing=10)
+        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(45 * font_scale), spacing=int(10 * font_scale))
         
-        self._step_back_btn = Button(text='<< Back', font_name=CHINESE_FONT, background_color=(0.3, 0.3, 0.5, 1))
+        self._step_back_btn = Button(text='<< Back', font_name=CHINESE_FONT_PATH, font_size=int(18 * font_scale), background_color=(0.3, 0.3, 0.5, 1))
         self._step_back_btn.bind(on_press=self._handle_step_back)
         btn_row.add_widget(self._step_back_btn)
         
-        self._step_reset_btn = Button(text='Reset', font_name=CHINESE_FONT, background_color=(0.5, 0.3, 0.3, 1))
+        self._step_reset_btn = Button(text='Reset', font_name=CHINESE_FONT_PATH, font_size=int(18 * font_scale), background_color=(0.5, 0.3, 0.3, 1))
         self._step_reset_btn.bind(on_press=self._handle_step_reset)
         btn_row.add_widget(self._step_reset_btn)
         
-        self._step_next_btn = Button(text='Next >>', font_name=CHINESE_FONT, background_color=(0.3, 0.3, 0.5, 1))
+        self._step_next_btn = Button(text='Next >>', font_name=CHINESE_FONT_PATH, font_size=int(18 * font_scale), background_color=(0.3, 0.3, 0.5, 1))
         self._step_next_btn.bind(on_press=self._handle_step_next)
         btn_row.add_widget(self._step_next_btn)
         

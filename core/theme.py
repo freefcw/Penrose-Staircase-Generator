@@ -39,6 +39,7 @@ class ThemeColors:
     """主题颜色配置"""
     step_gray: RGB
     step_red: RGB
+    step_outline: RGB  # 台阶边框颜色
     wall_front: RGB
     wall_side: RGB
     text_black: RGB
@@ -98,6 +99,7 @@ Theme.CLASSIC = Theme(
     colors=ThemeColors(
         step_gray=RGB(128, 128, 128),
         step_red=RGB(220, 60, 60),
+        step_outline=RGB(60, 60, 60),
         wall_front=RGB(0, 0, 255),
         wall_side=RGB(255, 255, 0),
         text_black=RGB(0, 0, 0),
@@ -120,6 +122,7 @@ Theme.MINIMAL = Theme(
     colors=ThemeColors(
         step_gray=RGB(160, 160, 165),
         step_red=RGB(200, 80, 80),
+        step_outline=RGB(100, 100, 105),
         wall_front=RGB(70, 100, 140),
         wall_side=RGB(245, 220, 160),
         text_black=RGB(60, 60, 60),
@@ -142,6 +145,7 @@ Theme.PROFESSIONAL = Theme(
     colors=ThemeColors(
         step_gray=RGB(100, 100, 105),
         step_red=RGB(180, 70, 70),
+        step_outline=RGB(50, 50, 55),
         wall_front=RGB(45, 55, 72),
         wall_side=RGB(200, 200, 195),
         text_black=RGB(30, 30, 35),
@@ -164,6 +168,7 @@ Theme.ARTISTIC = Theme(
     colors=ThemeColors(
         step_gray=RGB(120, 130, 160),
         step_red=RGB(255, 100, 80),
+        step_outline=RGB(60, 50, 100),
         wall_front=RGB(80, 60, 140),
         wall_side=RGB(255, 180, 100),
         text_black=RGB(50, 40, 80),

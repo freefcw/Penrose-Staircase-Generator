@@ -20,8 +20,10 @@ from core.geometry import GeometryTransform
 from core.services.state_manager import StateManager
 from core.layout import LayoutConstants
 from core.staircase import StaircaseConfig
-from core.theme import Theme
+from core.theme import Theme, RGB
+from core.index_converter import IndexConverter
 from ui.kivy_layout import MainScreen
+from rendering.canvas import DrawHandle
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -103,13 +105,18 @@ class PenroseKivyApp(App):
         
         # UI 引用
         self._main_screen: MainScreen | None = None
+        
+        # 高亮相关状态
+        self._current_transform: GeometryTransform | None = None
+        self._current_kivy_canvas = None  # KivyCanvas
+        self._current_highlight: DrawHandle | None = None
     
     def build(self):
         """构建应用 UI"""
-        # 设置窗口大小
-        Window.size = (1000, 700)
-        Window.minimum_width = 600
-        Window.minimum_height = 500
+        # 设置窗口大小（放大2倍）
+        Window.size = (2000, 1400)
+        Window.minimum_width = 1200
+        Window.minimum_height = 1000
         
         # 创建主界面
         self._main_screen = MainScreen(
@@ -143,22 +150,38 @@ class PenroseKivyApp(App):
         widget_width = staircase_widget.width
         widget_height = staircase_widget.height
         
+        # 获取平台配置
+        from core.platform_config import get_platform_config
+        platform_config = get_platform_config()
+        
         # 计算基础布局
         base_layout = calculate_layout(config, 1.0)
         
-        # 固定缩放因子为 3
-        scale_factor = 3.0
+        # 使用平台配置的缩放因子
+        scale_factor = platform_config.preview_scale_factor
         
-        # 使用固定缩放重新计算布局
+        # 使用缩放重新计算布局
         layout = calculate_layout(config, scale_factor)
         
         # 获取 Kivy 画布适配器
         from rendering.kivy_canvas import KivyCanvas
         kivy_canvas = KivyCanvas(staircase_widget, widget_height)
         
-        # 计算偏移：楼梯右移 250px，上移减少留白
-        center_offset_x = (widget_width - layout.window_width) / 2 + 400  # 右移 250px
-        center_offset_y = 10  # 减少顶部留白
+        # 估算数列区域高度（根据总步数）
+        total_steps = config.total_steps
+        seq_rows = (total_steps // 10) + 1  # 每行约10个
+        seq_height = seq_rows * 40 * scale_factor  # 每行高度约40px
+        
+        # 楼梯和数列的总高度（作为整体）
+        total_content_height = layout.stair_height + 50 + seq_height  # 50是间距
+        
+        # 计算偏移：将楼梯+数列整体在widget中居中
+        center_offset_x = (widget_width - layout.window_width) / 2
+        center_offset_y = (widget_height - total_content_height) / 2
+        
+        # 确保偏移不为负，至少距离顶部50px，并整体左移50px
+        center_offset_x = max(0, center_offset_x) - 50
+        center_offset_y = max(50, center_offset_y)
         
         # 创建几何变换器（添加偏移）
         transform = GeometryTransform(
@@ -178,19 +201,32 @@ class PenroseKivyApp(App):
         )
         renderer.render(model.start_step_index)
         
-        # 渲染数列
+        # 渲染数列 - 在楼梯下方，水平居中后左移100px
         from rendering.sequence import SequenceRenderer
         seq_renderer = SequenceRenderer(
-            kivy_canvas, config, widget_width, self._state.theme, x_offset=400
+            kivy_canvas, config, widget_width, self._state.theme, x_offset=center_offset_x - 100
         )
-        # 数列起始 Y 坐标（楼梯下方，减少间距）
-        seq_start_y = layout.stair_height + center_offset_y + 10  # 从 30 改为 10
+        # 数列起始 Y 坐标（楼梯下方，上移100px）
+        seq_start_y = layout.stair_height + center_offset_y + 50 - 100
         seq_renderer.render(
             model.color_sequence,
             model.start_step_index,
             seq_start_y,
             scale_factor,
             show_decimal=True,
+        )
+        
+        # 保存高亮所需的状态
+        self._current_transform = transform
+        self._current_kivy_canvas = kivy_canvas
+        self._current_highlight = None  # 清除旧高亮
+        
+        # 初始化步进控制面板数据
+        self._main_screen.control_panel.set_step_data(
+            total=config.total_steps,
+            start_index=model.walking_order_start,
+            color_sequence=model.walking_order_colors,
+            on_change=self._handle_step_change,
         )
         
         # 打印信息
@@ -200,6 +236,49 @@ class PenroseKivyApp(App):
             f"scale={scale_factor:.2f}"
         )
     
+    def _handle_step_change(self, walking_index: int) -> None:
+        """处理步进位置变化，高亮当前台阶"""
+        model = self._state.cached_model
+        config = self._state.cached_config
+        
+        if not model or not config:
+            return
+        
+        if not self._current_transform or not self._current_kivy_canvas:
+            return
+        
+        # 打印步进信息
+        color = 1 if model.walking_order_colors[walking_index] else 0
+        logger.info(f"[步进] 位置: {walking_index + 1}/{config.total_steps}, 颜色: {color}")
+        
+        # 清除旧高亮
+        if self._current_highlight:
+            try:
+                self._current_highlight.undraw()
+            except Exception:
+                pass
+            self._current_highlight = None
+        
+        # 转换索引（行走顺序 -> 绘制顺序）
+        draw_index = IndexConverter.walking_to_draw(walking_index, config)
+        step_pos = model.get_step_position(draw_index)
+        
+        if not step_pos:
+            logger.warning(f"未找到绘制索引 {draw_index} 的台阶位置")
+            return
+        
+        # 将模型坐标转换为屏幕坐标
+        screen_points = [
+            self._current_transform.to_screen(p[0], -p[1])
+            for p in [step_pos.p1, step_pos.p2, step_pos.p3, step_pos.p4]
+        ]
+        
+        # 绘制高亮边框（亮青色）
+        highlight_color = RGB(0, 255, 255)
+        self._current_highlight = self._current_kivy_canvas.draw_polygon_outline(
+            screen_points, highlight_color, width=3
+        )
+
     def _handle_generate(self, n: int, theme_name: str, scale: float) -> None:
         """处理生成按钮回调"""
         # 更新状态

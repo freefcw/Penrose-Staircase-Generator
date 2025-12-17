@@ -67,6 +67,14 @@ class KivyCanvas(Canvas):
     def _flip_y(self, y: float) -> float:
         """将 Y 坐标从 top-left 坐标系翻转到 bottom-left 坐标系"""
         return self._window_height - y
+    
+    def _transform_x(self, x: float) -> float:
+        """将 X 坐标转换为 widget 内的全局坐标"""
+        return x + self._widget.x
+    
+    def _transform_y(self, y: float) -> float:
+        """将 Y 坐标翻转并转换为 widget 内的全局坐标"""
+        return self._flip_y(y) + self._widget.y
 
     def _to_rgba(self, rgb: RGB) -> tuple[float, float, float, float]:
         """将 RGB 转换为 Kivy 的 RGBA (0-1 范围)"""
@@ -80,18 +88,18 @@ class KivyCanvas(Canvas):
         if len(points) < 3:
             return
 
-        # 转换点坐标
-        flipped_points = [(p.x, self._flip_y(p.y)) for p in points]
+        # 转换点坐标（使用 widget 相对坐标）
+        transformed_points = [(self._transform_x(p.x), self._transform_y(p.y)) for p in points]
 
         # 使用 Mesh 绘制填充多边形 (triangle_fan 模式)
         # 构建顶点数据: [x1, y1, u1, v1, x2, y2, u2, v2, ...]
         vertices = []
-        for x, y in flipped_points:
+        for x, y in transformed_points:
             vertices.extend([x, y, 0, 0])  # u, v 设为 0
 
         # 构建索引 (triangle_fan: 0, 1, 2, 0, 2, 3, 0, 3, 4, ...)
         indices = []
-        for i in range(1, len(flipped_points) - 1):
+        for i in range(1, len(transformed_points) - 1):
             indices.extend([0, i, i + 1])
 
         with self._canvas:
@@ -102,7 +110,7 @@ class KivyCanvas(Canvas):
             if outline:
                 self._Color(*self._to_rgba(outline))
                 flat_points = []
-                for x, y in flipped_points:
+                for x, y in transformed_points:
                     flat_points.extend([x, y])
                 self._Line(points=flat_points, close=True, width=1)
 
@@ -112,7 +120,8 @@ class KivyCanvas(Canvas):
         with self._canvas:
             self._Color(*self._to_rgba(color))
             self._Line(
-                points=[p1.x, self._flip_y(p1.y), p2.x, self._flip_y(p2.y)],
+                points=[self._transform_x(p1.x), self._transform_y(p1.y), 
+                        self._transform_x(p2.x), self._transform_y(p2.y)],
                 width=width
             )
 
@@ -128,20 +137,35 @@ class KivyCanvas(Canvas):
     ) -> None:
         """绘制文本"""
         from kivy.graphics import Rectangle as KivyRect
+        import os
+        
+        # 获取中文字体路径
+        chinese_font_paths = [
+            '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Regular.ttf',
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/sarasa/sarasa/SarasaGothicSC-Regular.ttf',
+            '/System/Library/Fonts/PingFang.ttc',
+        ]
+        font_name = None
+        for path in chinese_font_paths:
+            if os.path.exists(path):
+                font_name = path
+                break
         
         # 创建 CoreLabel 渲染文本
         label = self._CoreLabel(
             text=text,
             font_size=size,
             color=self._to_rgba(color),
+            font_name=font_name,
         )
         label.refresh()
         texture = label.texture
         
         if texture:
             # 计算绘制位置 (居中对齐)
-            x = position.x - texture.width / 2
-            y = self._flip_y(position.y) - texture.height / 2
+            x = self._transform_x(position.x) - texture.width / 2
+            y = self._transform_y(position.y) - texture.height / 2
             
             with self._canvas:
                 self._Color(1, 1, 1, 1)  # 白色，让纹理颜色显示
@@ -152,9 +176,9 @@ class KivyCanvas(Canvas):
         self, p1: Point, p2: Point, fill: RGB, outline: RGB, width: int = 1
     ) -> None:
         """绘制矩形"""
-        # 计算左下角和尺寸
-        x1, y1 = p1.x, self._flip_y(p1.y)
-        x2, y2 = p2.x, self._flip_y(p2.y)
+        # 计算左下角和尺寸（使用 widget 相对坐标）
+        x1, y1 = self._transform_x(p1.x), self._transform_y(p1.y)
+        x2, y2 = self._transform_x(p2.x), self._transform_y(p2.y)
         
         left = min(x1, x2)
         bottom = min(y1, y2)
@@ -181,10 +205,10 @@ class KivyCanvas(Canvas):
         if len(points) < 3:
             return KivyDrawHandle(None, None)  # type: ignore
 
-        # 转换点坐标
-        flipped_points = [(p.x, self._flip_y(p.y)) for p in points]
+        # 转换点坐标（使用 widget 相对坐标）
+        transformed_points = [(self._transform_x(p.x), self._transform_y(p.y)) for p in points]
         flat_points = []
-        for x, y in flipped_points:
+        for x, y in transformed_points:
             flat_points.extend([x, y])
 
         group = self._InstructionGroup()

@@ -59,19 +59,19 @@ DARWIN_CONFIG = PlatformConfig(
 )
 
 LINUX_CONFIG = PlatformConfig(
-    # 主窗口 - 针对 4K 高分辨率屏幕
+    # 主窗口 - 放大2倍
     offset_x=0,
     offset_y=0,
-    font_scale=1.5,  # 4K 屏幕需要更大字体
-    preview_scale_factor=3.0,  # 主窗口放大 3 倍
-    min_window_width=800,
-    min_window_height=600,
-    # 控制面板 - 4K 屏幕需要更大尺寸
-    control_panel_width=600,
-    control_panel_height=800,
-    # 步进面板 - 4K 屏幕需要更大尺寸
-    step_panel_width=550,
-    step_panel_height=650,
+    font_scale=2.0,  # 字体放大2倍
+    preview_scale_factor=3.0,  # 缩放因子放大2倍
+    min_window_width=1600,
+    min_window_height=1200,
+    # 控制面板 - 放大2倍
+    control_panel_width=640,
+    control_panel_height=1000,
+    # 步进面板 - 放大2倍
+    step_panel_width=640,
+    step_panel_height=600,
 )
 
 WINDOWS_CONFIG = PlatformConfig(

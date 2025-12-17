@@ -214,8 +214,8 @@ class StaircaseRenderer:
         else:
             color = self.theme.colors.step_gray
 
-        # 绘制多边形
-        self.canvas.draw_polygon(points, color)
+        # 绘制多边形（带边框）
+        self.canvas.draw_polygon(points, color, self.theme.colors.step_outline)
 
         # 记录位置
         if not skip_record:
