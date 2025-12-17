@@ -34,6 +34,7 @@ class SequenceRenderer:
         config: StaircaseConfig,
         window_width: float,
         theme: Theme,
+        x_offset: float = 0.0,
     ):
         """
         初始化序列渲染器
@@ -43,11 +44,13 @@ class SequenceRenderer:
             config: 楼梯配置
             window_width: 窗口宽度
             theme: 主题对象
+            x_offset: X轴偏移量（正值向右移动）
         """
         self.canvas = canvas
         self.config = config
         self.window_width = window_width
         self.theme = theme
+        self.x_offset = x_offset
 
     def render(
         self,
@@ -119,7 +122,7 @@ class SequenceRenderer:
         """绘制颜色序列网格"""
         box_size = LayoutConstants.SEQUENCE_BOX_SIZE * scale
         margin = LayoutConstants.SEQUENCE_MARGIN * scale
-        start_x = (self.window_width - (self.COLS * (box_size + margin))) / 2
+        start_x = (self.window_width - (self.COLS * (box_size + margin))) / 2 + self.x_offset
 
         # 计算行高
         row_height = box_size + margin
@@ -131,7 +134,7 @@ class SequenceRenderer:
 
         # 绘制标题
         hint_pos = Point(
-            self.window_width / 2, 
+            self.window_width / 2 + self.x_offset, 
             start_y - LayoutConstants.SEQUENCE_TITLE_OFFSET * scale
         )
         if self.theme.style.sequence_hint_simple:
