@@ -1,0 +1,5 @@
+# Flet Web 打包专用依赖
+# Pyodide 平台可用版本：flet>=0.28.3, pillow==10.2.0
+flet>=0.28.3
+pillow>=10.2.0
+typing-extensions>=4.0.0
