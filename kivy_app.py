@@ -113,10 +113,10 @@ class PenroseKivyApp(App):
     
     def build(self):
         """构建应用 UI"""
-        # 设置窗口大小（放大2倍）
-        Window.size = (2000, 1400)
-        Window.minimum_width = 1200
-        Window.minimum_height = 1000
+        # 设置窗口大小（原来的一半）
+        Window.size = (1000, 700)
+        Window.minimum_width = 600
+        Window.minimum_height = 500
         
         # 创建主界面
         self._main_screen = MainScreen(
@@ -201,13 +201,17 @@ class PenroseKivyApp(App):
         )
         renderer.render(model.start_step_index)
         
-        # 渲染数列 - 在楼梯下方，水平居中后左移100px
+        # 渲染数列 - 在楼梯正下方水平居中
         from rendering.sequence import SequenceRenderer
+        
+        # 计算楼梯的中心 X 坐标，用于对齐数列
+        stair_center_x = layout.offset_x + center_offset_x + layout.window_width / 2
+        
         seq_renderer = SequenceRenderer(
             kivy_canvas, config, widget_width, self._state.theme, x_offset=center_offset_x - 100
         )
-        # 数列起始 Y 坐标（楼梯下方，上移100px）
-        seq_start_y = layout.stair_height + center_offset_y + 50 - 100
+        # 数列起始 Y 坐标（楼梯下方）
+        seq_start_y = layout.stair_height + center_offset_y
         seq_renderer.render(
             model.color_sequence,
             model.start_step_index,

@@ -43,19 +43,19 @@ class PlatformConfig:
 # === 平台特定配置 ===
 
 DARWIN_CONFIG = PlatformConfig(
-    # 主窗口
-    offset_x=150,
-    offset_y=-50,
-    font_scale=1.0,
-    preview_scale_factor=1.0,
-    min_window_width=400,
-    min_window_height=300,
-    # 控制面板
-    control_panel_width=300,
-    control_panel_height=420,
-    # 步进面板
-    step_panel_width=320,
-    step_panel_height=280,
+    # 主窗口 - 较小窗口但保持组件大小
+    offset_x=0,
+    offset_y=0,
+    font_scale=2.0,  # 保持组件原有大小
+    preview_scale_factor=3.0,  # 楼梯预览缩放（与 Linux 一致）
+    min_window_width=800,
+    min_window_height=600,
+    # 控制面板 - 保持原有大小
+    control_panel_width=640,
+    control_panel_height=1000,
+    # 步进面板 - 保持原有大小
+    step_panel_width=640,
+    step_panel_height=600,
 )
 
 LINUX_CONFIG = PlatformConfig(
