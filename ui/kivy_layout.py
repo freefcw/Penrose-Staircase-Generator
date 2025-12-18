@@ -8,7 +8,6 @@ Kivy UI 布局模块 - 定义 Penrose 楼梯的 Kivy 界面
 """
 from __future__ import annotations
 
-import os
 from typing import Callable
 
 from kivy.uix.widget import Widget
@@ -19,70 +18,13 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner
 from kivy.uix.slider import Slider
 from kivy.graphics import Color, Rectangle
-from kivy.core.text import LabelBase
 
 from rendering.kivy_canvas import KivyCanvas
 from core.platform_config import get_platform_config
-
-
-# 注册中文字体 (跨平台支持)
-def _register_chinese_font():
-    """注册支持中文的字体"""
-    # 跨平台中文字体路径
-    font_paths = [
-        # Linux 中文字体 - 按优先级排序
-        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Regular.ttf',  # HarmonyOS Sans SC
-        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Bold.ttf',
-        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',  # Noto Sans CJK
-        '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
-        '/usr/share/fonts/sarasa/sarasa/SarasaGothicSC-Regular.ttf',  # 更纱黑体
-        '/usr/share/fonts/truetype/arphic/uming.ttc',  # AR PL UMing
-        '/usr/share/fonts/truetype/arphic/ukai.ttc',
-        # 用户本地字体
-        os.path.expanduser('~/.local/share/fonts/NotoSansCJKsc-Regular.otf'),
-        # macOS 中文字体
-        '/System/Library/Fonts/PingFang.ttc',
-        '/System/Library/Fonts/STHeiti Light.ttc',
-        '/System/Library/Fonts/Hiragino Sans GB.ttc',
-        '/Library/Fonts/Arial Unicode.ttf',
-    ]
-    
-    for font_path in font_paths:
-        if os.path.exists(font_path):
-            try:
-                LabelBase.register(name='ChineseFont', fn_regular=font_path)
-                return 'ChineseFont'
-            except Exception:
-                continue
-    
-    # 如果没有找到中文字体，使用默认字体
-    return 'Roboto'
-
-def _get_chinese_font_path():
-    """获取中文字体的完整路径（Kivy SDL2需要完整路径）"""
-    font_paths = [
-        # Linux 中文字体 - 按优先级排序
-        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Regular.ttf',
-        '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Bold.ttf',
-        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-        '/usr/share/fonts/sarasa/sarasa/SarasaGothicSC-Regular.ttf',
-        '/usr/share/fonts/truetype/arphic/uming.ttc',
-        os.path.expanduser('~/.local/share/fonts/NotoSansCJKsc-Regular.otf'),
-        # macOS 中文字体
-        '/System/Library/Fonts/PingFang.ttc',
-        '/System/Library/Fonts/STHeiti Light.ttc',
-    ]
-    
-    for font_path in font_paths:
-        if os.path.exists(font_path):
-            return font_path
-    
-    return 'Roboto'  # 回退到默认字体
+from core.fonts import CHINESE_FONT_PATH, register_chinese_font
 
 # 注册字体（保留兼容性）
-CHINESE_FONT = _register_chinese_font()
-# 获取字体路径（用于SDL2）
-CHINESE_FONT_PATH = _get_chinese_font_path()
+CHINESE_FONT = register_chinese_font()
 
 
 class StaircaseWidget(Widget):
@@ -305,76 +247,10 @@ class ControlPanelWidget(BoxLayout):
         # === 分隔线 ===
         self.add_widget(Widget(size_hint_y=None, height=int(20 * font_scale)))
         
-        # === 步进控制面板 ===
-        step_frame = BoxLayout(orientation='vertical', size_hint_y=None, height=int(200 * font_scale), spacing=int(10 * font_scale))
-        
-        # 步进标题
-        step_frame.add_widget(Label(
-            text='Step Navigation',
-            size_hint_y=None, height=int(30 * font_scale),
-            font_name=CHINESE_FONT_PATH, font_size=int(16 * font_scale), bold=True,
-            color=(1, 1, 1, 1)
-        ))
-        
-        # 状态显示区
-        status_box = BoxLayout(orientation='vertical', size_hint_y=None, height=int(80 * font_scale), spacing=int(5 * font_scale))
-        
-        # 位置行
-        pos_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(25 * font_scale))
-        pos_row.add_widget(Label(text='Position:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
-        self._step_position_label = Label(text='1 / 24', font_name=CHINESE_FONT_PATH, color=(1, 1, 1, 1), font_size=int(14 * font_scale), bold=True, size_hint_x=0.6)
-        pos_row.add_widget(self._step_position_label)
-        status_box.add_widget(pos_row)
-        
-        # 颜色行
-        color_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(25 * font_scale))
-        color_row.add_widget(Label(text='Color:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
-        self._step_color_label = Label(text='0', font_name=CHINESE_FONT_PATH, color=(0.3, 0.3, 1, 1), font_size=int(16 * font_scale), bold=True, size_hint_x=0.6)
-        color_row.add_widget(self._step_color_label)
-        status_box.add_widget(color_row)
-        
-        # 从起点步数行
-        steps_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(25 * font_scale))
-        steps_row.add_widget(Label(text='From Start:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.4))
-        self._steps_from_start_label = Label(text='0', font_name=CHINESE_FONT_PATH, color=(1, 1, 1, 1), font_size=int(14 * font_scale), bold=True, size_hint_x=0.6)
-        steps_row.add_widget(self._steps_from_start_label)
-        status_box.add_widget(steps_row)
-        
-        step_frame.add_widget(status_box)
-        
-        # 步数输入行
-        input_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(35 * font_scale), spacing=int(10 * font_scale))
-        input_row.add_widget(Label(text='Steps:', font_name=CHINESE_FONT_PATH, font_size=int(12 * font_scale), color=(0.7, 0.7, 0.7, 1), size_hint_x=0.3))
-        self._step_input = TextInput(text='1', size_hint_x=0.3, multiline=False, input_filter='int', font_size=int(14 * font_scale))
-        input_row.add_widget(self._step_input)
-        input_row.add_widget(Widget(size_hint_x=0.4))
-        step_frame.add_widget(input_row)
-        
-        # 控制按钮行
-        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(45 * font_scale), spacing=int(10 * font_scale))
-        
-        self._step_back_btn = Button(text='<< Back', font_name=CHINESE_FONT_PATH, font_size=int(18 * font_scale), background_color=(0.3, 0.3, 0.5, 1))
-        self._step_back_btn.bind(on_press=self._handle_step_back)
-        btn_row.add_widget(self._step_back_btn)
-        
-        self._step_reset_btn = Button(text='Reset', font_name=CHINESE_FONT_PATH, font_size=int(18 * font_scale), background_color=(0.5, 0.3, 0.3, 1))
-        self._step_reset_btn.bind(on_press=self._handle_step_reset)
-        btn_row.add_widget(self._step_reset_btn)
-        
-        self._step_next_btn = Button(text='Next >>', font_name=CHINESE_FONT_PATH, font_size=int(18 * font_scale), background_color=(0.3, 0.3, 0.5, 1))
-        self._step_next_btn.bind(on_press=self._handle_step_next)
-        btn_row.add_widget(self._step_next_btn)
-        
-        step_frame.add_widget(btn_row)
-        self.add_widget(step_frame)
-        
-        # 步进控制数据
-        self._step_total = 24
-        self._step_current = 0
-        self._step_start_index = 0
-        self._step_color_sequence: list[bool] = []
-        self._step_accumulated = 0
-        self._on_step_change: Callable[[int], None] | None = None
+        # === 步进导航组件 ===
+        from ui.step_navigation_widget import StepNavigationWidget
+        self._step_nav = StepNavigationWidget(font_scale=font_scale)
+        self.add_widget(self._step_nav)
         
         # 填充剩余空间
         self.add_widget(Widget())
@@ -408,60 +284,17 @@ class ControlPanelWidget(BoxLayout):
         """设置状态栏消息"""
         self._status_label.text = message
     
-    # === 步进控制方法 ===
-    def _get_step_count(self) -> int:
-        """获取步数输入值"""
-        try:
-            return max(1, int(self._step_input.text))
-        except (ValueError, AttributeError):
-            return 1
+    # === 步进控制方法（代理到 StepNavigationWidget）===
     
-    def _handle_step_back(self, instance):
-        """后退"""
-        steps = self._get_step_count()
-        self._step_current = (self._step_current - steps) % self._step_total
-        self._step_accumulated -= steps
-        self._update_step_display()
-        if self._on_step_change:
-            self._on_step_change(self._step_current)
-    
-    def _handle_step_next(self, instance):
-        """前进"""
-        steps = self._get_step_count()
-        self._step_current = (self._step_current + steps) % self._step_total
-        self._step_accumulated += steps
-        self._update_step_display()
-        if self._on_step_change:
-            self._on_step_change(self._step_current)
-    
-    def _handle_step_reset(self, instance):
-        """复位到起点"""
-        self._step_current = self._step_start_index
-        self._step_accumulated = 0
-        self._update_step_display()
-        if self._on_step_change:
-            self._on_step_change(self._step_current)
-    
-    def _update_step_display(self):
-        """更新步进显示"""
-        self._step_position_label.text = f'{self._step_current + 1} / {self._step_total}'
-        
-        if self._step_color_sequence and 0 <= self._step_current < len(self._step_color_sequence):
-            color_val = 1 if self._step_color_sequence[self._step_current] else 0
-            self._step_color_label.text = str(color_val)
-            self._step_color_label.color = (1, 0.3, 0.3, 1) if color_val == 1 else (0.3, 0.3, 1, 1)
-        
-        self._steps_from_start_label.text = str(self._step_accumulated)
-    
-    def set_step_data(self, total: int, start_index: int, color_sequence: list[bool], on_change: Callable[[int], None] | None = None):
-        """设置步进数据"""
-        self._step_total = total
-        self._step_start_index = start_index
-        self._step_current = start_index
-        self._step_color_sequence = color_sequence
-        self._step_accumulated = 0
-        self._on_step_change = on_change
-        self._update_step_display()
+    def set_step_data(
+        self,
+        total: int,
+        start_index: int,
+        color_sequence: list[bool],
+        on_change: Callable[[int], None] | None = None,
+    ) -> None:
+        """设置步进数据（代理到 StepNavigationWidget）"""
+        self._step_nav.set_data(total, start_index, color_sequence, on_change)
     
     @property
     def current_n(self) -> int:

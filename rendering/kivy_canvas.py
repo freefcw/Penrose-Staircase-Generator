@@ -137,46 +137,14 @@ class KivyCanvas(Canvas):
     ) -> None:
         """绘制文本"""
         from kivy.graphics import Rectangle as KivyRect
-        import platform
-        import os
-        
-        # 根据平台获取字体路径列表
-        system = platform.system().lower()
-        if system == 'darwin':
-            # macOS 字体
-            font_paths = [
-                '/System/Library/Fonts/PingFang.ttc',
-                '/System/Library/Fonts/STHeiti Light.ttc',
-                '/Library/Fonts/Arial Unicode.ttf',
-            ]
-        elif system == 'linux':
-            # Linux 字体
-            font_paths = [
-                '/usr/share/fonts/truetype/HarmonyOS_Sans_SC/HarmonyOS_Sans_SC_Regular.ttf',
-                '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-                '/usr/share/fonts/sarasa/sarasa/SarasaGothicSC-Regular.ttf',
-                '/usr/share/fonts/truetype/arphic/uming.ttc',
-                os.path.expanduser('~/.local/share/fonts/NotoSansCJKsc-Regular.otf'),
-            ]
-        else:
-            # Windows 或其他平台
-            font_paths = [
-                'C:\\Windows\\Fonts\\msyh.ttc',  # 微软雅黑
-                'C:\\Windows\\Fonts\\simsun.ttc',  # 宋体
-            ]
-        
-        font_name = 'Roboto'  # 默认使用 Kivy 内置字体
-        for path in font_paths:
-            if os.path.exists(path):
-                font_name = path
-                break
+        from core.fonts import CHINESE_FONT_PATH
         
         # 创建 CoreLabel 渲染文本
         label = self._CoreLabel(
             text=text,
             font_size=size,
             color=self._to_rgba(color),
-            font_name=font_name,
+            font_name=CHINESE_FONT_PATH,
         )
         label.refresh()
         texture = label.texture
