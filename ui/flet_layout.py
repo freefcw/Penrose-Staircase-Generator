@@ -9,6 +9,7 @@ Flet UI 布局模块 - 定义 Penrose 楼梯的 Flet 界面
 """
 from __future__ import annotations
 
+import logging
 from typing import Callable
 
 import flet as ft
@@ -16,12 +17,15 @@ import flet.canvas as cv
 
 from rendering.flet_canvas import FletCanvas
 
+logger = logging.getLogger(__name__)
+
 
 class StaircaseCanvas(ft.Container):
     """
     楼梯绘图区域
     
     封装 Flet Canvas 控件，提供 FletCanvas 适配器接口
+    复用 Canvas 实例避免重复创建开销
     """
     
     def __init__(self, width: float = 700, height: float = 500):
@@ -29,8 +33,15 @@ class StaircaseCanvas(ft.Container):
         self._height = height
         self._flet_canvas: FletCanvas | None = None
         
+        # 创建可复用的 Canvas 控件
+        self._cv_canvas = cv.Canvas(
+            shapes=[],
+            width=float("inf"),
+            height=float("inf"),
+        )
+        
         super().__init__(
-            content=ft.Text("Loading...", color=ft.Colors.GREY_400),
+            content=self._cv_canvas,
             bgcolor=ft.Colors.GREY_200,
             border_radius=8,
             expand=True,
@@ -42,31 +53,26 @@ class StaircaseCanvas(ft.Container):
         return self._flet_canvas
     
     def update_canvas(self) -> None:
-        """更新画布显示 - 重新创建 Canvas 控件"""
+        """更新画布显示 - 复用 Canvas 只更新 shapes"""
         if self._flet_canvas:
             # 过滤掉已移除的形状（None）
             shapes = [s for s in self._flet_canvas.get_shapes() if s is not None]
-            print(f"[DEBUG] 更新画布，形状数量: {len(shapes)}")
+            logger.debug(f"更新画布，形状数量: {len(shapes)}")
             
-            # 创建新的 Canvas 控件并替换内容
-            # 使用 width=inf, height=inf 让 Canvas 填满容器
-            new_canvas = cv.Canvas(
-                shapes=shapes,
-                width=float("inf"),
-                height=float("inf"),
-            )
-            self.content = new_canvas
+            # 更新现有 Canvas 的 shapes（不重建）
+            self._cv_canvas.shapes = shapes
             
             if self.page:
-                self.update()
+                self._cv_canvas.update()
     
     def clear_drawing(self) -> None:
         """清除绘图内容"""
         if self._flet_canvas:
             self._flet_canvas.clear()
-        self.content = ft.Text("Rendering...", color=ft.Colors.GREY_400)
+        # 清空 shapes 但保留 Canvas 实例
+        self._cv_canvas.shapes = []
         if self.page:
-            self.update()
+            self._cv_canvas.update()
         self._flet_canvas = None
 
 

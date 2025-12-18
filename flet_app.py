@@ -9,6 +9,7 @@ Flet 应用主模块 - Penrose 楼梯生成器的 Flet 版本
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING
 
 import flet as ft
@@ -63,6 +64,10 @@ class PenroseFletApp:
         # 高亮相关状态
         self._current_ctx: RenderContext | None = None
         self._current_highlight: DrawHandle | None = None
+        
+        # 渲染防抖
+        self._last_render_time: float = 0.0
+        self._render_debounce_ms: float = 100.0  # 100ms 防抖
     
     def main(self, page: ft.Page) -> None:
         """Flet 应用入口"""
@@ -90,15 +95,21 @@ class PenroseFletApp:
         
         # 确保布局完成后再渲染
         page.update()
-        self._render_staircase()
+        self._render_staircase(force=True)  # 首次渲染强制执行
         page.update()
     
     # === 渲染方法 ===
     
-    def _render_staircase(self) -> None:
+    def _render_staircase(self, force: bool = False) -> None:
         """渲染楼梯到画布"""
         if not self._staircase_canvas or not self._page:
             return
+        
+        # 防抖：跳过短时间内的重复渲染
+        current_time = time.time() * 1000  # 转换为毫秒
+        if not force and (current_time - self._last_render_time) < self._render_debounce_ms:
+            return
+        self._last_render_time = current_time
         
         # 获取或计算数据
         data = self._state.get_or_compute()
@@ -201,7 +212,7 @@ class PenroseFletApp:
         self._state.update_export_scale(scale)
         
         self._state.compute_and_cache()
-        self._render_staircase()
+        self._render_staircase(force=True)
         
         logger.info(f"生成完成: n={n}, theme={theme_name}, scale={scale}")
     
@@ -209,7 +220,7 @@ class PenroseFletApp:
         """处理Apply按钮回调 - 实时应用主题和缩放"""
         self._state.update_theme(Theme.get_by_name(theme_name))
         self._state.update_export_scale(scale)
-        self._render_staircase()
+        self._render_staircase(force=True)
         logger.info(f"已应用: theme={theme_name}, scale={scale}")
     
     def _handle_export(self, file_path: str) -> None:
@@ -261,7 +272,7 @@ class PenroseFletApp:
         self._state.update_n(session_config.n)
         self._state.update_theme(Theme.get_by_name(session_config.theme))
         self._state.compute_and_cache()
-        self._render_staircase()
+        self._render_staircase(force=True)
 
 
 def run_flet_app(config: AppConfig) -> int:
