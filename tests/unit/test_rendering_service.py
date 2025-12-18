@@ -6,6 +6,7 @@
 import pytest
 
 from core.staircase import StaircaseConfig
+from core.layout import LayoutInfo, calculate_layout_from_config
 
 
 # 检查是否有 GUI 环境
@@ -35,12 +36,9 @@ class TestLayoutCalculation:
         """创建测试配置"""
         return StaircaseConfig(a=4, b=3, c=2, d=3, step_length=1.0)
 
-    @requires_display
     def test_calculate_layout(self, config: StaircaseConfig) -> None:
         """测试布局计算"""
-        from core.services.rendering_service import RenderingService, LayoutInfo
-        
-        layout = RenderingService.calculate_layout(config)
+        layout = calculate_layout_from_config(config)
         
         assert isinstance(layout, LayoutInfo)
         assert layout.window_width > 0
@@ -48,14 +46,12 @@ class TestLayoutCalculation:
         assert layout.stair_height > 0
         assert layout.zoom > 0
 
-    @requires_display
     def test_calculate_layout_with_scale(self, config: StaircaseConfig) -> None:
         """测试带缩放的布局计算"""
-        from core.services.rendering_service import RenderingService
-        
-        layout1 = RenderingService.calculate_layout(config, scale=1.0)
-        layout2 = RenderingService.calculate_layout(config, scale=2.0)
+        layout1 = calculate_layout_from_config(config, scale=1.0)
+        layout2 = calculate_layout_from_config(config, scale=2.0)
         
         # 2x 缩放应该产生更大的窗口
         assert layout2.window_width > layout1.window_width
         assert layout2.window_height > layout1.window_height
+

@@ -71,3 +71,100 @@ LABEL_OFFSETS = {
     "C": LabelOffset(LayoutConstants.LABEL_OFFSET_C_X, LayoutConstants.LABEL_OFFSET_C_Y),
     "D": LabelOffset(0, LayoutConstants.LABEL_OFFSET_D_Y),
 }
+
+
+@dataclass(frozen=True)
+class LayoutInfo:
+    """
+    窗口布局信息（统一定义）
+    
+    包含渲染楼梯所需的所有布局参数
+    """
+    window_width: float
+    window_height: float
+    stair_height: float
+    zoom: float
+    offset_x: float
+    offset_y: float
+
+
+def calculate_layout(
+    a: int,
+    b: int,
+    c: int,
+    d: int,
+    step_length: float,
+    scale: float = 1.0,
+) -> LayoutInfo:
+    """
+    计算窗口布局（统一实现）
+    
+    Args:
+        a: A区台阶数
+        b: B区台阶数
+        c: C区台阶数
+        d: D区台阶数
+        step_length: 台阶长度
+        scale: 缩放因子
+        
+    Returns:
+        LayoutInfo 布局信息
+    """
+    # 导入几何常量（避免循环导入）
+    from core.geometry import GeometryTransform
+    
+    H = GeometryTransform.UNIT_HEIGHT
+    L = step_length
+    total_steps = a + b + c + d - 4
+
+    # 缩放因子
+    zoom = LayoutConstants.ZOOM_BASE / (
+        (a + b + c + d + L - 4) * LayoutConstants.ZOOM_DIVISOR
+    ) * scale
+
+    # 窗口尺寸
+    window_width = (a * L + b * L) * zoom
+    stair_height = (a * H * L + b * H * L) * zoom
+
+    # 序列显示区域高度
+    seq_rows = (total_steps // LayoutConstants.SEQUENCE_COLS) + 1
+    seq_height = (
+        seq_rows * (LayoutConstants.SEQUENCE_ROW_HEIGHT_FACTOR * scale)
+        + LayoutConstants.SEQUENCE_AREA_PADDING * scale
+    )
+
+    window_height = stair_height + seq_height
+
+    # 偏移量
+    offset_x = LayoutConstants.WINDOW_OFFSET_X * scale
+    offset_y = (a * L * H * 0.5) * zoom
+
+    return LayoutInfo(
+        window_width=window_width,
+        window_height=window_height,
+        stair_height=stair_height,
+        zoom=zoom,
+        offset_x=offset_x,
+        offset_y=offset_y,
+    )
+
+
+def calculate_layout_from_config(config, scale: float = 1.0) -> LayoutInfo:
+    """
+    从 StaircaseConfig 计算布局（便捷方法）
+    
+    Args:
+        config: StaircaseConfig 对象
+        scale: 缩放因子
+        
+    Returns:
+        LayoutInfo 布局信息
+    """
+    return calculate_layout(
+        a=config.a,
+        b=config.b,
+        c=config.c,
+        d=config.d,
+        step_length=config.step_length,
+        scale=scale,
+    )

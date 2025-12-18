@@ -17,7 +17,8 @@ from core.geometry import GeometryTransform
 from core.index_converter import IndexConverter
 from core.platform_config import get_platform_config
 from core.services.state_manager import StateManager
-from core.services.rendering_service import RenderingService, LayoutInfo
+from core.services.rendering_service import RenderingService
+from core.layout import LayoutInfo, calculate_layout_from_config
 from core.services.event_processor import EventProcessor
 from core.theme import Theme
 from export.exporter import ImageExporter
@@ -103,7 +104,7 @@ class PenroseApp:
             return False
         
         config, model = data
-        layout = RenderingService.calculate_layout(config, self._state.preview_scale)
+        layout = calculate_layout_from_config(config, self._state.preview_scale)
         self._print_info(config)
 
         # 创建窗口和渲染
@@ -270,7 +271,7 @@ class PenroseApp:
             return
 
         config, model = data
-        layout = RenderingService.calculate_layout(config, self._state.preview_scale)
+        layout = calculate_layout_from_config(config, self._state.preview_scale)
         
         # 关闭旧窗口，创建新窗口
         if self._win and not self._win.isClosed():
@@ -301,7 +302,7 @@ class PenroseApp:
         if config is None or model is None:
             return
         
-        layout = RenderingService.calculate_layout(config, self._state.preview_scale)
+        layout = calculate_layout_from_config(config, self._state.preview_scale)
 
         # 关闭旧窗口，创建新窗口
         if self._win and not self._win.isClosed():

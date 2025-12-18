@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from kivy.app import App
 from kivy.core.window import Window
@@ -18,66 +19,31 @@ from kivy.clock import Clock
 from core.config import AppConfig
 from core.geometry import GeometryTransform
 from core.services.state_manager import StateManager
-from core.layout import LayoutConstants
-from core.staircase import StaircaseConfig
+from core.layout import LayoutInfo, calculate_layout_from_config
 from core.theme import Theme, RGB
 from core.index_converter import IndexConverter
 from ui.kivy_layout import MainScreen
 from rendering.canvas import DrawHandle
+
+if TYPE_CHECKING:
+    from core.staircase import StaircaseConfig, StaircaseModel
+    from rendering.kivy_canvas import KivyCanvas
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class LayoutInfo:
-    """窗口布局信息（本地定义，避免导入 RenderingService）"""
-    window_width: float
-    window_height: float
-    stair_height: float
-    zoom: float
-    offset_x: float
-    offset_y: float
-
-
-def calculate_layout(config: StaircaseConfig, scale: float = 1.0) -> LayoutInfo:
-    """
-    计算窗口布局（本地实现，避免导入 RenderingService）
-    """
-    A, B, C, D, L = config.a, config.b, config.c, config.d, config.step_length
-    H = GeometryTransform.UNIT_HEIGHT
-
-    # 缩放因子
-    zoom = LayoutConstants.ZOOM_BASE / (
-        (A + B + C + D + L - 4) * LayoutConstants.ZOOM_DIVISOR
-    ) * scale
-
-    # 窗口尺寸
-    window_width = (A * L + B * L) * zoom
-    stair_height = (A * H * L + B * H * L) * zoom
-
-    # 序列显示区域高度
-    total_steps = config.total_steps
-    seq_rows = (total_steps // LayoutConstants.SEQUENCE_COLS) + 1
-    seq_height = (
-        seq_rows * (LayoutConstants.SEQUENCE_ROW_HEIGHT_FACTOR * scale)
-        + LayoutConstants.SEQUENCE_AREA_PADDING * scale
-    )
-
-    window_height = stair_height + seq_height
-
-    # 偏移量
-    offset_x = LayoutConstants.WINDOW_OFFSET_X * scale
-    offset_y = (A * L * H * 0.5) * zoom
-
-    return LayoutInfo(
-        window_width=window_width,
-        window_height=window_height,
-        stair_height=stair_height,
-        zoom=zoom,
-        offset_x=offset_x,
-        offset_y=offset_y,
-    )
+class RenderContext:
+    """渲染上下文，封装渲染所需的所有状态"""
+    layout: LayoutInfo
+    scale_factor: float
+    transform: GeometryTransform
+    kivy_canvas: "KivyCanvas"
+    widget_width: float
+    widget_height: float
+    center_offset_x: float
+    center_offset_y: float
 
 
 class PenroseKivyApp(App):
@@ -108,7 +74,7 @@ class PenroseKivyApp(App):
         
         # 高亮相关状态
         self._current_transform: GeometryTransform | None = None
-        self._current_kivy_canvas = None  # KivyCanvas
+        self._current_kivy_canvas: "KivyCanvas | None" = None
         self._current_highlight: DrawHandle | None = None
     
     def build(self):
@@ -129,8 +95,10 @@ class PenroseKivyApp(App):
         
         return self._main_screen
     
+    # === 渲染方法 ===
+    
     def _render_staircase(self) -> None:
-        """渲染楼梯到画布"""
+        """渲染楼梯到画布（协调方法）"""
         if not self._main_screen:
             return
         
@@ -142,102 +110,134 @@ class PenroseKivyApp(App):
         
         config, model = data
         
-        # 清除旧绘图
+        # 准备渲染上下文
+        ctx = self._prepare_render_context(config)
+        if ctx is None:
+            return
+        
+        # 绘制楼梯
+        self._draw_staircase(ctx, config, model)
+        
+        # 绘制序列
+        self._draw_sequence(ctx, config, model)
+        
+        # 保存高亮所需的状态
+        self._current_transform = ctx.transform
+        self._current_kivy_canvas = ctx.kivy_canvas
+        self._current_highlight = None
+        
+        # 初始化步进面板
+        self._init_step_panel(config, model)
+        
+        # 打印信息
+        logger.info(
+            f"Penrose-Staircase Nr. {self._state.n}: "
+            f"{config.a} {config.b} {config.c} {config.d} ({config.step_length}) "
+            f"scale={ctx.scale_factor:.2f}"
+        )
+    
+    def _prepare_render_context(self, config: "StaircaseConfig") -> RenderContext | None:
+        """准备渲染上下文：计算布局和创建画布"""
+        if not self._main_screen:
+            return None
+        
         staircase_widget = self._main_screen.staircase_widget
         staircase_widget.clear_drawing()
         
-        # 获取实际 widget 尺寸
+        # 获取 widget 尺寸
         widget_width = staircase_widget.width
         widget_height = staircase_widget.height
         
         # 获取平台配置
         from core.platform_config import get_platform_config
         platform_config = get_platform_config()
-        
-        # 计算基础布局
-        base_layout = calculate_layout(config, 1.0)
-        
-        # 使用平台配置的缩放因子
         scale_factor = platform_config.preview_scale_factor
         
-        # 使用缩放重新计算布局
-        layout = calculate_layout(config, scale_factor)
+        # 计算布局
+        layout = calculate_layout_from_config(config, scale_factor)
         
-        # 获取 Kivy 画布适配器
+        # 创建 Kivy 画布适配器
         from rendering.kivy_canvas import KivyCanvas
         kivy_canvas = KivyCanvas(staircase_widget, widget_height)
         
-        # 估算数列区域高度（根据总步数）
+        # 估算序列区域高度
         total_steps = config.total_steps
-        seq_rows = (total_steps // 10) + 1  # 每行约10个
-        seq_height = seq_rows * 40 * scale_factor  # 每行高度约40px
+        seq_rows = (total_steps // 10) + 1
+        seq_height = seq_rows * 40 * scale_factor
         
-        # 楼梯和数列的总高度（作为整体）
-        total_content_height = layout.stair_height + 50 + seq_height  # 50是间距
+        # 计算居中偏移
+        total_content_height = layout.stair_height + 50 + seq_height
+        center_offset_x = max(0, (widget_width - layout.window_width) / 2) - 50
+        center_offset_y = max(50, (widget_height - total_content_height) / 2)
         
-        # 计算偏移：将楼梯+数列整体在widget中居中
-        center_offset_x = (widget_width - layout.window_width) / 2
-        center_offset_y = (widget_height - total_content_height) / 2
-        
-        # 确保偏移不为负，至少距离顶部50px，并整体左移50px
-        center_offset_x = max(0, center_offset_x) - 50
-        center_offset_y = max(50, center_offset_y)
-        
-        # 创建几何变换器（添加偏移）
+        # 创建几何变换器
         transform = GeometryTransform(
-            layout.zoom, 
-            layout.offset_x + center_offset_x, 
+            layout.zoom,
+            layout.offset_x + center_offset_x,
             layout.offset_y + center_offset_y
         )
         
-        # 使用渲染器绘制楼梯
-        from rendering.renderer import StaircaseRenderer
-        renderer = StaircaseRenderer(
-            canvas=kivy_canvas,
+        return RenderContext(
+            layout=layout,
+            scale_factor=scale_factor,
             transform=transform,
+            kivy_canvas=kivy_canvas,
+            widget_width=widget_width,
+            widget_height=widget_height,
+            center_offset_x=center_offset_x,
+            center_offset_y=center_offset_y,
+        )
+    
+    def _draw_staircase(
+        self, ctx: RenderContext, config: "StaircaseConfig", model: "StaircaseModel"
+    ) -> None:
+        """绘制楼梯"""
+        from rendering.renderer import StaircaseRenderer
+        
+        renderer = StaircaseRenderer(
+            canvas=ctx.kivy_canvas,
+            transform=ctx.transform,
             config=config,
             model=model,
             theme=self._state.theme,
         )
         renderer.render(model.start_step_index)
-        
-        # 渲染数列 - 在楼梯正下方水平居中
+    
+    def _draw_sequence(
+        self, ctx: RenderContext, config: "StaircaseConfig", model: "StaircaseModel"
+    ) -> None:
+        """绘制颜色序列"""
         from rendering.sequence import SequenceRenderer
         
-        # 计算楼梯的中心 X 坐标，用于对齐数列
-        stair_center_x = layout.offset_x + center_offset_x + layout.window_width / 2
-        
         seq_renderer = SequenceRenderer(
-            kivy_canvas, config, widget_width, self._state.theme, x_offset=center_offset_x - 100
+            ctx.kivy_canvas,
+            config,
+            ctx.widget_width,
+            self._state.theme,
+            x_offset=ctx.center_offset_x - 100
         )
-        # 数列起始 Y 坐标（楼梯下方）
-        seq_start_y = layout.stair_height + center_offset_y
+        
+        seq_start_y = ctx.layout.stair_height + ctx.center_offset_y
         seq_renderer.render(
             model.color_sequence,
             model.start_step_index,
             seq_start_y,
-            scale_factor,
+            ctx.scale_factor,
             show_decimal=True,
         )
+    
+    def _init_step_panel(
+        self, config: "StaircaseConfig", model: "StaircaseModel"
+    ) -> None:
+        """初始化步进控制面板"""
+        if not self._main_screen:
+            return
         
-        # 保存高亮所需的状态
-        self._current_transform = transform
-        self._current_kivy_canvas = kivy_canvas
-        self._current_highlight = None  # 清除旧高亮
-        
-        # 初始化步进控制面板数据
         self._main_screen.control_panel.set_step_data(
             total=config.total_steps,
             start_index=model.walking_order_start,
             color_sequence=model.walking_order_colors,
             on_change=self._handle_step_change,
-        )
-        
-        # 打印信息
-        logger.info(
-            f"Penrose-Staircase Nr. {self._state.n}: "
-            f"{config.a} {config.b} {config.c} {config.d} ({config.step_length}) "
-            f"scale={scale_factor:.2f}"
         )
     
     def _handle_step_change(self, walking_index: int) -> None:

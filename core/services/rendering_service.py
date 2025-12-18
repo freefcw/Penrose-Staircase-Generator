@@ -11,7 +11,7 @@ from typing import final
 from graphics import GraphWin
 
 from core.geometry import GeometryTransform
-from core.layout import LayoutConstants
+from core.layout import LayoutConstants, LayoutInfo, calculate_layout_from_config
 from core.staircase import StaircaseConfig, StaircaseModel
 from core.theme import Theme
 from export.exporter import ImageExporter
@@ -19,91 +19,16 @@ from rendering.canvas import GraphicsCanvas
 from rendering.renderer import StaircaseRenderer
 from rendering.sequence import SequenceRenderer
 
-
-@final
-class LayoutInfo:
-    """窗口布局信息"""
-
-    def __init__(
-        self,
-        window_width: float,
-        window_height: float,
-        stair_height: float,
-        zoom: float,
-        offset_x: float,
-        offset_y: float,
-    ):
-        self.window_width = window_width
-        self.window_height = window_height
-        self.stair_height = stair_height
-        self.zoom = zoom
-        self.offset_x = offset_x
-        self.offset_y = offset_y
-
-
 @final
 class RenderingService:
     """
     渲染服务
     
     职责：
-    - 计算窗口布局
     - 协调楼梯和序列渲染
     - 处理图片导出
     """
-    
-    @staticmethod
-    def calculate_layout(config: StaircaseConfig, scale: float = 1.0) -> LayoutInfo:
-        """
-        计算窗口布局
-        
-        Args:
-            config: 楼梯配置
-            scale: 缩放因子
-            
-        Returns:
-            LayoutInfo 布局信息
-        """
-        A, B, C, D, L = (
-            config.a,
-            config.b,
-            config.c,
-            config.d,
-            config.step_length,
-        )
-        H = GeometryTransform.UNIT_HEIGHT
 
-        # 缩放因子
-        zoom = LayoutConstants.ZOOM_BASE / (
-            (A + B + C + D + L - 4) * LayoutConstants.ZOOM_DIVISOR
-        ) * scale
-
-        # 窗口尺寸
-        window_width = (A * L + B * L) * zoom
-        stair_height = (A * H * L + B * H * L) * zoom
-
-        # 序列显示区域高度
-        total_steps = config.total_steps
-        seq_rows = (total_steps // LayoutConstants.SEQUENCE_COLS) + 1
-        seq_height = (
-            seq_rows * (LayoutConstants.SEQUENCE_ROW_HEIGHT_FACTOR * scale)
-            + LayoutConstants.SEQUENCE_AREA_PADDING * scale
-        )
-
-        window_height = stair_height + seq_height
-
-        # 偏移量
-        offset_x = LayoutConstants.WINDOW_OFFSET_X * scale
-        offset_y = (A * L * H * 0.5) * zoom
-
-        return LayoutInfo(
-            window_width=window_width,
-            window_height=window_height,
-            stair_height=stair_height,
-            zoom=zoom,
-            offset_x=offset_x,
-            offset_y=offset_y,
-        )
     
     @staticmethod
     def render_to_canvas(
@@ -214,7 +139,7 @@ class RenderingService:
             scale: 缩放因子
             file_path: 输出文件路径
         """
-        layout = RenderingService.calculate_layout(config, scale)
+        layout = calculate_layout_from_config(config, scale)
         
         # 创建临时窗口
         export_win = GraphWin(
