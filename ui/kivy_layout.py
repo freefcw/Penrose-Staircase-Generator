@@ -86,7 +86,10 @@ class ControlPanelWidget(BoxLayout):
         initial_theme: str = "minimal",
         initial_scale: float = 1.0,
         on_generate: Callable[[int, str, float], None] | None = None,
+        on_apply: Callable[[str, float], None] | None = None,
         on_export: Callable[[str], None] | None = None,
+        on_export_config: Callable[[str], None] | None = None,
+        on_import_config: Callable[[str], None] | None = None,
         **kwargs
     ):
         # 获取平台配置
@@ -110,7 +113,10 @@ class ControlPanelWidget(BoxLayout):
         )
         
         self._on_generate = on_generate
+        self._on_apply = on_apply
         self._on_export = on_export
+        self._on_export_config = on_export_config
+        self._on_import_config = on_import_config
         self._font_scale = font_scale
         self._base_height = base_height
         self._base_font_size = base_font_size
@@ -209,19 +215,32 @@ class ControlPanelWidget(BoxLayout):
         scale_box.add_widget(self._scale_slider)
         self.add_widget(scale_box)
         
-        # === 生成按钮 ===
+        # === 按钮行（Generate + Apply）===
+        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(50 * font_scale), spacing=int(10 * font_scale))
+        
         self._generate_btn = Button(
             text='Generate',
-            size_hint_y=None,
-            height=int(50 * font_scale),
+            size_hint_x=0.5,
             font_name=CHINESE_FONT_PATH,
             font_size=int(16 * font_scale),
             background_color=(0.2, 0.6, 0.3, 1)
         )
         self._generate_btn.bind(on_press=self._handle_generate)
-        self.add_widget(self._generate_btn)
+        btn_row.add_widget(self._generate_btn)
         
-        # === 导出按钮 ===
+        self._apply_btn = Button(
+            text='Apply',
+            size_hint_x=0.5,
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(16 * font_scale),
+            background_color=(0.5, 0.4, 0.2, 1)
+        )
+        self._apply_btn.bind(on_press=self._handle_apply)
+        btn_row.add_widget(self._apply_btn)
+        
+        self.add_widget(btn_row)
+        
+        # === 导出PNG按钮 ===
         self._export_btn = Button(
             text='Export PNG',
             size_hint_y=None,
@@ -232,6 +251,31 @@ class ControlPanelWidget(BoxLayout):
         )
         self._export_btn.bind(on_press=self._handle_export)
         self.add_widget(self._export_btn)
+        
+        # === 配置管理按钮 ===
+        config_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(45 * font_scale), spacing=int(10 * font_scale))
+        
+        self._export_cfg_btn = Button(
+            text='导出配置',
+            size_hint_x=0.5,
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(14 * font_scale),
+            background_color=(0.4, 0.4, 0.5, 1)
+        )
+        self._export_cfg_btn.bind(on_press=self._handle_export_config)
+        config_row.add_widget(self._export_cfg_btn)
+        
+        self._import_cfg_btn = Button(
+            text='导入配置',
+            size_hint_x=0.5,
+            font_name=CHINESE_FONT_PATH,
+            font_size=int(14 * font_scale),
+            background_color=(0.4, 0.4, 0.5, 1)
+        )
+        self._import_cfg_btn.bind(on_press=self._handle_import_config)
+        config_row.add_widget(self._import_cfg_btn)
+        
+        self.add_widget(config_row)
         
         # === 状态栏 ===
         self._status_label = Label(
@@ -278,6 +322,26 @@ class ControlPanelWidget(BoxLayout):
             # 简化处理：使用固定路径
             self._on_export('penrose_export.png')
             self._status_label.text = 'Exported'
+    
+    def _handle_apply(self, instance):
+        """Apply 按钮 - 实时应用主题和缩放（不重新生成数据）"""
+        if self._on_apply:
+            theme = self._theme_spinner.text
+            scale = self._scale_slider.value
+            self._on_apply(theme, scale)
+            self._status_label.text = f'已应用: {theme}, {scale:.1f}x'
+    
+    def _handle_export_config(self, instance):
+        """导出配置"""
+        if self._on_export_config:
+            self._on_export_config('penrose_config.json')
+            self._status_label.text = '配置已导出'
+    
+    def _handle_import_config(self, instance):
+        """导入配置"""
+        if self._on_import_config:
+            self._on_import_config('penrose_config.json')
+            self._status_label.text = '配置已导入'
 
     
     def set_status(self, message: str):
@@ -323,7 +387,10 @@ class MainScreen(BoxLayout):
     def __init__(
         self,
         on_generate: Callable[[int, str, float], None] | None = None,
+        on_apply: Callable[[str, float], None] | None = None,
         on_export: Callable[[str], None] | None = None,
+        on_export_config: Callable[[str], None] | None = None,
+        on_import_config: Callable[[str], None] | None = None,
         **kwargs
     ):
         super().__init__(orientation='horizontal', **kwargs)
@@ -331,7 +398,10 @@ class MainScreen(BoxLayout):
         # 控制面板（左侧，包含步进控制）
         self.control_panel = ControlPanelWidget(
             on_generate=on_generate,
-            on_export=on_export
+            on_apply=on_apply,
+            on_export=on_export,
+            on_export_config=on_export_config,
+            on_import_config=on_import_config,
         )
         self.add_widget(self.control_panel)
         

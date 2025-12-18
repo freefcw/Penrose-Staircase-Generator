@@ -87,7 +87,10 @@ class PenroseKivyApp(App):
         # 创建主界面
         self._main_screen = MainScreen(
             on_generate=self._handle_generate,
+            on_apply=self._handle_apply,
             on_export=self._handle_export,
+            on_export_config=self._handle_export_config,
+            on_import_config=self._handle_import_config,
         )
         
         # 延迟渲染，等待 widget 尺寸确定
@@ -306,6 +309,79 @@ class PenroseKivyApp(App):
         staircase_widget.export_to_png(file_path)
         
         logger.info(f"导出完成: {file_path}")
+    
+    def _handle_apply(self, theme_name: str, scale: float) -> None:
+        """处理Apply按钮回调 - 实时应用主题和缩放（不重新生成数据）"""
+        self._state.update_theme(Theme.get_by_name(theme_name))
+        self._state.update_export_scale(scale)
+        
+        # 重新渲染（使用缓存数据）
+        self._render_staircase()
+        
+        logger.info(f"已应用: theme={theme_name}, scale={scale}")
+    
+    def _handle_export_config(self, file_path: str) -> None:
+        """处理导出配置回调"""
+        model = self._state.cached_model
+        config = self._state.cached_config
+        if model is None or config is None:
+            logger.warning("没有可导出的配置数据")
+            return
+        
+        from core.config_io import SessionConfig, ConfigExporter
+        
+        session_config = SessionConfig(
+            n=self._state.n,
+            theme=self._state.theme.name.value,
+            color_sequence=model.color_sequence,
+            start_step_index=model.start_step_index,
+            walking_order_colors=model.walking_order_colors,
+            walking_order_start=model.walking_order_start,
+            a=config.a,
+            b=config.b,
+            c=config.c,
+            d=config.d,
+            step_length=config.step_length,
+        )
+        ConfigExporter.export_to_file(session_config, file_path)
+        logger.info(f"配置已导出: {file_path}")
+    
+    def _handle_import_config(self, file_path: str) -> None:
+        """处理导入配置回调"""
+        from core.config_io import ConfigExporter
+        from core.staircase import StaircaseConfig, StaircaseModel
+        
+        session_config = ConfigExporter.import_from_file(file_path)
+        if session_config is None:
+            logger.warning(f"无法导入配置: {file_path}")
+            return
+        
+        # 更新状态
+        self._state.update_n(session_config.n)
+        self._state.update_theme(Theme.get_by_name(session_config.theme))
+        
+        # 创建配置和模型
+        config = StaircaseConfig(
+            a=session_config.a,
+            b=session_config.b,
+            c=session_config.c,
+            d=session_config.d,
+            step_length=session_config.step_length,
+        )
+        model = StaircaseModel(config)
+        model.color_sequence = session_config.color_sequence
+        model.start_step_index = session_config.start_step_index
+        model.walking_order_colors = session_config.walking_order_colors
+        model.walking_order_start = session_config.walking_order_start
+        
+        # 设置缓存
+        self._state._cached_config = config
+        self._state._cached_model = model
+        
+        # 重新渲染
+        self._render_staircase()
+        
+        logger.info(f"配置已导入: {file_path}")
 
 
 def run_kivy_app(config: AppConfig) -> int:
