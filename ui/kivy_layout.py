@@ -319,9 +319,12 @@ class ControlPanelWidget(BoxLayout):
     
     def _handle_export(self, instance):
         if self._on_export:
-            # 简化处理：使用固定路径
-            self._on_export('penrose_export.png')
-            self._status_label.text = 'Exported'
+            # 生成带时间戳的文件名
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f'penrose_{timestamp}.png'
+            self._on_export(filename)
+            self._status_label.text = f'Exported: {filename}'
     
     def _handle_apply(self, instance):
         """Apply 按钮 - 实时应用主题和缩放（不重新生成数据）"""
@@ -334,14 +337,55 @@ class ControlPanelWidget(BoxLayout):
     def _handle_export_config(self, instance):
         """导出配置"""
         if self._on_export_config:
-            self._on_export_config('penrose_config.json')
-            self._status_label.text = '配置已导出'
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f'penrose_config_{timestamp}.json'
+            self._on_export_config(filename)
+            self._status_label.text = f'配置已导出: {filename}'
     
     def _handle_import_config(self, instance):
-        """导入配置"""
-        if self._on_import_config:
-            self._on_import_config('penrose_config.json')
-            self._status_label.text = '配置已导入'
+        """导入配置 - 显示文件选择弹窗"""
+        from kivy.uix.popup import Popup
+        from kivy.uix.filechooser import FileChooserListView
+        from kivy.uix.boxlayout import BoxLayout as BL
+        from kivy.uix.button import Button as Btn
+        
+        content = BL(orientation='vertical')
+        filechooser = FileChooserListView(
+            path='.',
+            filters=['*.json'],
+        )
+        content.add_widget(filechooser)
+        
+        btn_layout = BL(size_hint_y=None, height=50, spacing=10)
+        
+        def on_select(btn_instance):
+            if filechooser.selection and self._on_import_config:
+                file_path = filechooser.selection[0]
+                self._on_import_config(file_path)
+                self._status_label.text = f'配置已导入'
+            popup.dismiss()
+        
+        def on_cancel(btn_instance):
+            popup.dismiss()
+        
+        # 使用中文字体
+        select_btn = Btn(text='选择', font_name=CHINESE_FONT_PATH, background_color=(0.2, 0.6, 0.3, 1))
+        select_btn.bind(on_press=on_select)
+        cancel_btn = Btn(text='取消', font_name=CHINESE_FONT_PATH, background_color=(0.5, 0.3, 0.3, 1))
+        cancel_btn.bind(on_press=on_cancel)
+        
+        btn_layout.add_widget(select_btn)
+        btn_layout.add_widget(cancel_btn)
+        content.add_widget(btn_layout)
+        
+        popup = Popup(
+            title='Import Config',  # Popup 标题暂用英文避免乱码
+            title_font=CHINESE_FONT_PATH,
+            content=content,
+            size_hint=(0.9, 0.9),
+        )
+        popup.open()
 
     
     def set_status(self, message: str):
