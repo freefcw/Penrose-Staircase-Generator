@@ -144,3 +144,27 @@ class PlatformConfigProvider:
 def get_platform_config() -> PlatformConfig:
     """获取当前平台的配置（便捷函数）"""
     return PlatformConfigProvider.get_config()
+
+
+def is_mobile_platform() -> bool:
+    """检测是否为移动平台 (Android/iOS)
+    
+    Flet 在移动端运行时会设置 FLET_PLATFORM 环境变量。
+    
+    Returns:
+        True 如果在 Android 或 iOS 上运行
+    """
+    import os
+    flet_platform = os.getenv("FLET_PLATFORM", "").lower()
+    return flet_platform in ("android", "ios")
+
+
+def supports_pillow() -> bool:
+    """检测当前平台是否支持 Pillow
+    
+    桌面平台支持 Pillow，移动平台不支持。
+    
+    Returns:
+        True 如果当前平台支持 Pillow
+    """
+    return not is_mobile_platform()

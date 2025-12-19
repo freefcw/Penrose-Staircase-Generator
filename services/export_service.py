@@ -40,6 +40,10 @@ class ExportService:
         """
         导出高质量 PNG 图片
         
+        根据平台自动选择导出策略：
+        - 桌面平台：使用 Pillow 高质量渲染
+        - 移动平台：暂不支持（Pillow 无法在移动端运行）
+        
         Args:
             config: 楼梯配置
             model: 楼梯模型
@@ -49,6 +53,22 @@ class ExportService:
         Returns:
             是否成功
         """
+        from core.platform_config import supports_pillow
+        
+        if supports_pillow():
+            return self._export_via_pillow(config, model, theme, file_path)
+        else:
+            logger.warning("移动端暂不支持 PNG 导出功能")
+            return False
+    
+    def _export_via_pillow(
+        self,
+        config: "StaircaseConfig",
+        model: "StaircaseModel",
+        theme: "Theme",
+        file_path: str,
+    ) -> bool:
+        """桌面端 Pillow 高质量渲染导出"""
         from rendering.pillow_canvas import PillowCanvas
         from core.geometry import GeometryTransform
         from core.layout import calculate_layout_from_config

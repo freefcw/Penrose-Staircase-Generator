@@ -9,11 +9,16 @@ class TestStateManager:
 
     def test_init(self) -> None:
         """测试初始化"""
+        from core.platform_config import PlatformConfigProvider
+        
         manager = StateManager(n=10, theme=Theme.CLASSIC, export_scale=2.0)
         assert manager.n == 10
         assert manager.theme == Theme.CLASSIC
         assert manager.export_scale == 2.0
-        assert manager.preview_scale == 1.6
+        
+        # preview_scale 受平台缩放因子影响: 1.6 * scale_factor
+        expected_preview_scale = 1.6 * PlatformConfigProvider.get_preview_scale_factor()
+        assert manager.preview_scale == expected_preview_scale
 
     def test_update_n(self) -> None:
         """测试更新 N 值"""
