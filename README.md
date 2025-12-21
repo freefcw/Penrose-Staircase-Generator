@@ -22,3 +22,12 @@ Written 2022 by F. Lehr
 ![Penrose_Stairs_035_for_Reutersvard_and_Escher_320x214](https://user-images.githubusercontent.com/114293671/196004460-57620bec-68ab-40e0-b09a-e5c4bf4a1391.png)
 
 ![Penrose_Stairs_035_Castle_of_the_Wizards_320x259](https://user-images.githubusercontent.com/114293671/196005860-287e4efa-a7d0-4256-bab7-9efc3c84fe85.png)
+
+
+彭罗斯阶梯
+
+
+make build-macos     # 打包 macOS
+make build-android   # 打包 Android APK
+make build-web       # 打包 Web
+make help            # 显示所有命令

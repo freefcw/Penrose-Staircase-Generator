@@ -495,15 +495,228 @@ class ControlPanel(ft.Container):
         return self._scale_slider.value
 
 
+class ResponsiveLayout(ft.Container):
+    """
+    响应式布局容器
+    
+    - 桌面端 (宽度 >= 600): 左右分栏布局
+    - 移动端 (宽度 < 600): AppBar + 抽屉菜单
+    """
+    
+    MOBILE_BREAKPOINT = 600
+    
+    def __init__(
+        self,
+        control_panel: ControlPanel,
+        staircase_canvas: StaircaseCanvas,
+    ):
+        self._control_panel = control_panel
+        self._staircase_canvas = staircase_canvas
+        self._is_mobile = False
+        
+        # 移动端抽屉菜单
+        self._drawer = ft.NavigationDrawer(
+            controls=[
+                ft.Container(
+                    content=self._create_drawer_content(),
+                    padding=0,
+                )
+            ],
+            bgcolor=ft.Colors.GREY_900,
+        )
+        
+        # 移动端 AppBar
+        self._app_bar = ft.AppBar(
+            leading=ft.IconButton(
+                icon=ft.Icons.MENU,
+                on_click=self._toggle_drawer,
+                icon_color=ft.Colors.WHITE,
+            ),
+            title=ft.Text("Penrose Staircase", weight=ft.FontWeight.BOLD),
+            bgcolor=ft.Colors.GREY_900,
+            actions=[
+                ft.IconButton(
+                    icon=ft.Icons.IMAGE,
+                    tooltip="导出 PNG",
+                    on_click=self._handle_mobile_export,
+                    icon_color=ft.Colors.WHITE,
+                ),
+            ],
+        )
+        
+        # 桌面端布局
+        self._desktop_layout = ft.Row([
+            control_panel,
+            staircase_canvas,
+        ], expand=True, spacing=0)
+        
+        # 移动端布局（仅画布）
+        self._mobile_layout = ft.Container(
+            content=staircase_canvas,
+            expand=True,
+        )
+        
+        super().__init__(
+            content=self._desktop_layout,
+            expand=True,
+        )
+    
+    def _create_drawer_content(self) -> ft.Column:
+        """创建抽屉内容 - 复制控制面板的核心 UI"""
+        return ft.Column([
+            ft.Container(
+                content=ft.Text(
+                    "Penrose Control",
+                    size=20,
+                    weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE,
+                ),
+                padding=ft.padding.only(left=20, top=20, bottom=10),
+            ),
+            ft.Divider(height=1, color=ft.Colors.GREY_700),
+            
+            # N 输入
+            ft.Container(
+                content=ft.Row([
+                    ft.Text("N =", size=14, color=ft.Colors.WHITE),
+                    self._control_panel._n_input,
+                ]),
+                padding=ft.padding.symmetric(horizontal=20, vertical=5),
+            ),
+            
+            # 主题选择
+            ft.Container(
+                content=ft.Row([
+                    ft.Text("Theme", size=14, color=ft.Colors.WHITE),
+                    self._control_panel._theme_dropdown,
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                padding=ft.padding.symmetric(horizontal=20, vertical=5),
+            ),
+            
+            # 缩放滑块
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text("Scale", size=14, color=ft.Colors.WHITE),
+                        self._control_panel._scale_text,
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    self._control_panel._scale_slider,
+                ]),
+                padding=ft.padding.symmetric(horizontal=20, vertical=5),
+            ),
+            
+            # 按钮
+            ft.Container(
+                content=ft.Row([
+                    ft.ElevatedButton(
+                        "Generate",
+                        bgcolor=ft.Colors.GREEN_700,
+                        color=ft.Colors.WHITE,
+                        on_click=self._handle_generate_and_close,
+                        expand=True,
+                    ),
+                    ft.ElevatedButton(
+                        "Apply",
+                        bgcolor=ft.Colors.AMBER_700,
+                        color=ft.Colors.WHITE,
+                        on_click=self._handle_apply_and_close,
+                        expand=True,
+                    ),
+                ], spacing=10),
+                padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            ),
+            
+            # 状态栏
+            ft.Container(
+                content=self._control_panel._status_text,
+                padding=ft.padding.symmetric(horizontal=20),
+            ),
+            
+            ft.Divider(height=1, color=ft.Colors.GREY_700),
+            
+            # 步进导航
+            ft.Container(
+                content=self._control_panel._step_nav,
+                padding=ft.padding.symmetric(horizontal=20),
+            ),
+        ], spacing=5, scroll=ft.ScrollMode.AUTO)
+    
+    def _toggle_drawer(self, e) -> None:
+        """切换抽屉显示"""
+        if self.page:
+            self.page.open(self._drawer)
+    
+    def _close_drawer(self) -> None:
+        """关闭抽屉"""
+        if self.page:
+            self.page.close(self._drawer)
+    
+    def _handle_generate_and_close(self, e) -> None:
+        """生成并关闭抽屉"""
+        self._control_panel._handle_generate(e)
+        self._close_drawer()
+    
+    def _handle_apply_and_close(self, e) -> None:
+        """应用并关闭抽屉"""
+        self._control_panel._handle_apply(e)
+        self._close_drawer()
+    
+    def _handle_mobile_export(self, e) -> None:
+        """移动端导出"""
+        self._control_panel._handle_export(e)
+    
+    def did_mount(self) -> None:
+        """挂载后检测屏幕尺寸"""
+        self._check_layout()
+        if self.page:
+            self.page.on_resized = self._on_resize
+    
+    def _on_resize(self, e) -> None:
+        """窗口大小变化时重新检测布局"""
+        self._check_layout()
+    
+    def _check_layout(self) -> None:
+        """检测并切换布局模式"""
+        if not self.page:
+            return
+        
+        width = self.page.window.width or 800
+        is_mobile = width < self.MOBILE_BREAKPOINT
+        
+        if is_mobile != self._is_mobile:
+            self._is_mobile = is_mobile
+            self._apply_layout()
+    
+    def _apply_layout(self) -> None:
+        """应用布局"""
+        if not self.page:
+            return
+        
+        if self._is_mobile:
+            # 移动端：显示 AppBar，隐藏侧边栏
+            self.page.appbar = self._app_bar
+            self._control_panel.visible = False
+            self.content = self._staircase_canvas
+            logger.info("切换到移动端布局")
+        else:
+            # 桌面端：隐藏 AppBar，显示侧边栏
+            self.page.appbar = None
+            self._control_panel.visible = True
+            self.content = self._desktop_layout
+            logger.info("切换到桌面端布局")
+        
+        self.page.update()
+
+
 def create_main_layout(
     on_generate: Callable[[int, str, float], None] | None = None,
     on_apply: Callable[[str, float], None] | None = None,
     on_export: Callable[[str], None] | None = None,
     on_export_config: Callable[[str], None] | None = None,
     on_import_config: Callable[[str], None] | None = None,
-) -> tuple[ft.Row, ControlPanel, StaircaseCanvas]:
+) -> tuple[ResponsiveLayout, ControlPanel, StaircaseCanvas]:
     """
-    创建主界面布局
+    创建主界面布局（响应式）
     
     Returns:
         (主布局, 控制面板, 楼梯画布)
@@ -518,9 +731,6 @@ def create_main_layout(
     
     staircase_canvas = StaircaseCanvas()
     
-    main_layout = ft.Row([
-        control_panel,
-        staircase_canvas,
-    ], expand=True, spacing=0)
+    main_layout = ResponsiveLayout(control_panel, staircase_canvas)
     
     return main_layout, control_panel, staircase_canvas
